@@ -1,0 +1,8 @@
+folder,positive,negative,min,round,test,train,total
+woodhouses,640,379,379,375,75,300,750
+pcf,795,379,379,375,75,300,750
+human vocal,75,530,75,75,15,60,150
+field cricket,609,225,225,200,40,160,400
+engine,131,486,131,100,20,80,200
+coyote,272,294,272,250,50,200,500
+bullfrog,421,384,384,375,75,300,750
