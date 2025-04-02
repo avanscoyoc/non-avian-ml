@@ -23,16 +23,16 @@ from tqdm import tqdm
 
 
 class DataProcessor:
-    def __init__(self, datapath, species_list, datatype="data"):
+    def __init__(self, datapath, species_list, datatype):
         self.datapath = datapath
         self.species_list = species_list
-        self.datatype = "data"
+        self.datatype = datatype
         self.all_species = pd.DataFrame()
         self.df_each_species = defaultdict(list)
 
     def load_data(self):
         """Load file paths and labels into a structured DataFrame."""
-        print("Loading dataset...") 
+        print("Loading dataset...")
         for species in self.species_list:
             pos_files = glob.glob(
                 os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
@@ -59,24 +59,28 @@ class DataProcessor:
         self.all_species.set_index("files", inplace=True)
         self.all_species = self.all_species.astype(int)
         print("Dataset loaded:")
-        print(self.all_species.sum('index'))  # ADDED
-        print(self.all_species.head())
+        print(self.all_species.sum("index"))  # ADDED
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', None)
+        print(self.all_species.index)
         return self.all_species
 
 
 class Model:
-    def __init__(self, model_name="BirdNET"):
+    def __init__(self, model_name="Perch"):
         print("Loading model...")
-        self.model = torch.hub.load("kitzeslab/bioacoustics-model-zoo", "BirdNET", trust_repo=True)
+        self.model = torch.hub.load(
+            "kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True
+        )
         self.num_workers = os.cpu_count() * 3 // 4  # Use 75% of CPU cores
         print(f"CPU CORES: {self.num_workers}")
         print(f"Model loaded: {model_name}")
 
-    def train_and_evaluate(self, df, species_list, folds=5):
+    def train_and_evaluate(self, df, species_list, folds=2):
         """Perform stratified K-fold training and evaluation."""
         self.species_list = species_list
         self.all_scores = defaultdict(list)
-        
+
         for species in self.species_list:
             print(f"Processing species: {species}")
 
@@ -84,17 +88,31 @@ class Model:
             labels = df[species]
             skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=8)
             roc_auc_scores = []
-            
-            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(file_paths, labels)):
-                
-                train_files, test_files = (file_paths[train_idx].tolist(), file_paths[test_idx].tolist())
+
+            for fold_idx, (train_idx, test_idx) in enumerate(
+                skf.split(file_paths, labels)
+            ):
+                train_files, test_files = (
+                    file_paths[train_idx].tolist(),
+                    file_paths[test_idx].tolist(),
+                )
                 labels_train, labels_val = labels.iloc[train_idx], labels.iloc[test_idx]
 
                 labels_train = labels_train.to_numpy().reshape(-1, 1)
                 labels_val = labels_val.to_numpy().reshape(-1, 1)
 
-                emb_train = self.model.embed(train_files, return_dfs=False, batch_size=4, num_workers=self.num_workers)
-                emb_val = self.model.embed(test_files, return_dfs=False, batch_size=4, num_workers=self.num_workers)
+                emb_train = self.model.embed(
+                    train_files,
+                    return_dfs=False,
+                    batch_size=4,
+                    num_workers=self.num_workers,
+                )
+                emb_val = self.model.embed(
+                    test_files,
+                    return_dfs=False,
+                    batch_size=4,
+                    num_workers=self.num_workers,
+                )
 
                 self.model.change_classes([species])
                 self.model.network.fit(emb_train, labels_train, emb_val, labels_val)
@@ -107,7 +125,7 @@ class Model:
 
             avg_roc_auc = np.mean(roc_auc_scores)
             print(f"Average Across All Folds: {avg_roc_auc}")
-            all_scores[species] = avg_roc_auc
+            self.all_scores[species] = avg_roc_auc
 
-        print(f"All scores: {all_scores}")
-        return all_scores
+        print(f"All scores: {self.all_scores}")
+        return self.all_scores
