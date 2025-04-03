@@ -1,26 +1,11 @@
 import os
 import glob
-import random
 import numpy as np
 import pandas as pd
 import torch
-import sklearn
-
 from sklearn.model_selection import StratifiedKFold
-from sklearn.metrics import roc_auc_score, average_precision_score
-
-from opensoundscape.ml import bioacoustics_model_zoo as bmz
-from opensoundscape.ml.shallow_classifier import quick_fit
-
-from scipy.special import softmax
-from matplotlib import pyplot as plt
+from sklearn.metrics import roc_auc_score
 from collections import defaultdict
-
-# from matplotlib import pyplot as plt
-from collections import defaultdict
-import torch.nn.functional as F
-from tqdm import tqdm
-
 
 class DataProcessor:
     def __init__(self, datapath, species_list, datatype):
@@ -60,23 +45,19 @@ class DataProcessor:
         self.all_species = self.all_species.astype(int)
         print("Dataset loaded:")
         print(self.all_species.sum("index"))  # ADDED
-        pd.set_option('display.max_columns', None)
-        pd.set_option('display.width', None)
-        print(self.all_species.index)
+        print(self.all_species.head())
         return self.all_species
 
 
 class Model:
-    def __init__(self, model_name="Perch"):
+    def __init__(self, model_name):
         print("Loading model...")
-        self.model = torch.hub.load(
-            "kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True
-        )
+        self.model = torch.hub.load("kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True)
         self.num_workers = os.cpu_count() * 3 // 4  # Use 75% of CPU cores
         print(f"CPU CORES: {self.num_workers}")
         print(f"Model loaded: {model_name}")
 
-    def train_and_evaluate(self, df, species_list, folds=2):
+    def train_and_evaluate(self, df, species_list, folds):
         """Perform stratified K-fold training and evaluation."""
         self.species_list = species_list
         self.all_scores = defaultdict(list)
@@ -89,35 +70,20 @@ class Model:
             skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=8)
             roc_auc_scores = []
 
-            for fold_idx, (train_idx, test_idx) in enumerate(
-                skf.split(file_paths, labels)
-            ):
-                train_files, test_files = (
-                    file_paths[train_idx].tolist(),
-                    file_paths[test_idx].tolist(),
-                )
+            for fold_idx, (train_idx, test_idx) in enumerate(skf.split(file_paths, labels)):
+                train_files, test_files = (file_paths[train_idx].tolist(),file_paths[test_idx].tolist())
                 labels_train, labels_val = labels.iloc[train_idx], labels.iloc[test_idx]
 
                 labels_train = labels_train.to_numpy().reshape(-1, 1)
                 labels_val = labels_val.to_numpy().reshape(-1, 1)
 
-                emb_train = self.model.embed(
-                    train_files,
-                    return_dfs=False,
-                    batch_size=4,
-                    num_workers=self.num_workers,
-                )
-                emb_val = self.model.embed(
-                    test_files,
-                    return_dfs=False,
-                    batch_size=4,
-                    num_workers=self.num_workers,
-                )
+                emb_train = self.model.embed(train_files,return_dfs=False,batch_size=4,num_workers=self.num_workers)
+                emb_val = self.model.embed(test_files,return_dfs=False,batch_size=4,num_workers=self.num_workers)
 
                 self.model.change_classes([species])
                 self.model.network.fit(emb_train, labels_train, emb_val, labels_val)
 
-                preds = self.model.network(torch.tensor(emb_val)).detach().numpy()
+                preds = self.model.network(torch.tensor(emb_val, dtype=torch.float32)).detach().numpy()
                 curr_score = roc_auc_score(labels_val, preds, average=None)
                 roc_auc_scores.append(curr_score)
 
