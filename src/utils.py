@@ -19,14 +19,9 @@ class DataProcessor:
         """Load file paths and labels into a structured DataFrame."""
         print("Loading dataset...")
         for species in self.species_list:
-            pos_files = glob.glob(
-                os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
-            )
-            neg_files = glob.glob(
-                os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
-            )
+            pos_files = glob.glob(os.path.join(self.datapath, species, self.datatype, "pos", "*.wav"))
+            neg_files = glob.glob(os.path.join(self.datapath, species, self.datatype, "neg", "*.wav"))
             all_files = pos_files + neg_files
-
             encoding_pos_files = [1] * len(pos_files) + [0] * len(neg_files)
             encoding_neg_files = [0] * len(pos_files) + [1] * len(neg_files)
 
