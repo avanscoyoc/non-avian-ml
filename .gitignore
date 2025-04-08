@@ -6,6 +6,4 @@ __pycache__
 
 data/
 
-non-avian_ML/
-
-__MACOSX/non-avian_ML/
+__MACOSX/data/
