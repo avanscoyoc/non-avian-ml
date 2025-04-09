@@ -1,13 +1,21 @@
-from utils import DataProcessor, Model
+from utils import *
 
-# Define paths and species list
-datapath = "/workspaces/non-avian-ml-toy/non-avian_ML/audio"
-species_list = ["coyote", "human_vocal"]
+if __name__ == "__main__":
+    results = main(
+        datapath="/workspaces/non-avian-ml-toy/data/audio/",
+        species_list=["human_vocal"],
+        datatype="data",
+        model_name="BirdNET",
+        batch_size=4,
+        folds=2,
+        training_size=75,
+        random_seed=2,
+        results_path="/workspaces/non-avian-ml-toy/results",
+    )
 
-# Load Data
-data_processor = DataProcessor(datapath, species_list, datatype="data") # use "data" for BirdNET "data_5s" for Perch
-all_species_df = data_processor.load_data()
-
-# Initialize and Train Model
-model = Model(model_name="BirdNET") # use "BirdNET" or use "Perch"
-model.train_and_evaluate(all_species_df, species_list=species_list, folds=2)
+    if results is None:
+        print(
+            "Run was skipped due to insufficient samples. No results file was created."
+        )
+    else:
+        print("Run completed successfully.")
