@@ -1,8 +1,9 @@
+from config import *
 from utils import *
 
-if __name__ == "__main__":
-    args = parser.parse_args()
-    results = run_model(
+
+def main(args):
+    run_model(
         datapath=args.datapath,
         species_list=args.species_list,
         datatype=args.datatype,
@@ -14,9 +15,7 @@ if __name__ == "__main__":
         results_path=args.results_path,
     )
 
-    if results is None:
-        print(
-            "Run was skipped due to insufficient samples. No results file was created."
-        )
-    else:
-        print("Run completed successfully.")
+if __name__ == "__main__":
+
+    args = parse_args()
+    results = main(args)

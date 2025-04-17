@@ -1,133 +1,11 @@
 import os
-import glob
 import numpy as np
 import pandas as pd
-import torch
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
-import random
 from datetime import datetime
-import argparse
 
-class DataLoader:
-    """Handles loading and preprocessing of data."""
-
-    def __init__(
-        self, datapath, species_list, datatype, training_size=None, random_seed=42
-    ):
-        self.datapath = datapath
-        self.species_list = species_list
-        self.datatype = datatype
-        self.training_size = training_size
-        random.seed(random_seed)
-
-    def sample_files(self, files, size, species, file_type="positive"):
-        """Helper method to sample files with proper error handling."""
-        if len(files) < size:
-            print(
-                f"Warning: Requested {size} {file_type} samples but only found {len(files)} for {species}"
-            )
-            return files
-        return random.sample(files, size)
-
-    def load_species_data(self, species):
-        """Load data for a single species with optional random sampling."""
-        pos_files = glob.glob(
-            os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
-        )
-        neg_files = glob.glob(
-            os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
-        )
-
-        # Check if we have enough samples before proceeding
-        if self.training_size is not None:
-            if (
-                len(pos_files) < self.training_size
-                or len(neg_files) < self.training_size
-            ):
-                raise ValueError(
-                    f"Insufficient samples for {species}: "
-                    f"Found {len(pos_files)} positive and {len(neg_files)} negative samples, "
-                    f"but {self.training_size} samples were requested."
-                )
-
-        # Random sampling if training_size is specified
-        if self.training_size is not None:
-            min_samples = min(len(pos_files), len(neg_files))
-            training_size = min(self.training_size, min_samples)
-            pos_files = self.sample_files(pos_files, training_size, species, "positive")
-            neg_files = self.sample_files(neg_files, training_size, species, "negative")
-
-            print(
-                f"Using {len(pos_files)} positive and {len(neg_files)} negative samples for {species}"
-            )
-
-        all_files = pos_files + neg_files
-        encoding_pos_files = [1] * len(pos_files) + [0] * len(neg_files)
-        encoding_neg_files = [0] * len(pos_files) + [1] * len(neg_files)
-
-        return pd.DataFrame(
-            {
-                "files": all_files,
-                species: encoding_pos_files,
-                "noise": encoding_neg_files,
-            }
-        )
-
-    def load_data(self):
-        """Load data for all species."""
-        print("Loading dataset...")
-        df_each_species = {}
-        for species in self.species_list:
-            df_each_species[species] = self.load_species_data(species)
-
-        all_species = pd.concat(df_each_species.values(), axis=0)
-        all_species.fillna(0, inplace=True)
-        all_species.set_index("files", inplace=True)
-        all_species = all_species.astype(int)
-        print("Dataset loaded:")
-        print(all_species.sum("index"))
-        print(all_species.head())
-        return all_species
-
-
-class ModelWrapper:
-    """Encapsulates model loading, embedding, and training."""
-
-    def __init__(self, model_name, batch_size):
-        print("Loading model...")
-        self.model = torch.hub.load(
-            "kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True
-        )
-        self.num_workers = os.cpu_count() * 3 // 4  # Use 75% of CPU cores
-        self.batch_size = batch_size
-        print(f"CPU CORES: {self.num_workers}")
-        print(f"Model loaded: {model_name}")
-
-    def embed_files(self, file_paths):
-        """Generate embeddings for a list of file paths."""
-        return self.model.embed(
-            file_paths,
-            return_dfs=False,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-
-    def train_and_evaluate(
-        self, species, train_files, test_files, labels_train, labels_val
-    ):
-        """Train and evaluate the model for a single species."""
-        self.model.change_classes([species])
-        emb_train = self.embed_files(train_files)
-        emb_val = self.embed_files(test_files)
-
-        self.model.network.fit(emb_train, labels_train, emb_val, labels_val)
-        preds = (
-            self.model.network(torch.tensor(emb_val, dtype=torch.float32))
-            .detach()
-            .numpy()
-        )
-        return roc_auc_score(labels_val, preds, average=None)
+from model_loader import * 
 
 
 class Trainer:
@@ -216,52 +94,6 @@ class ResultManager:
         print(f"Results saved to: {filepath}")
         return filepath
 
-
-parser = argparse.ArgumentParser(
-    description="Run BirdNET model training and evaluation."
-)
-parser.add_argument(
-    "--datapath", type=str, default="/workspaces/non-avian-ml-toy/data/audio", help="Path to the audio data directory."
-)
-parser.add_argument(
-    "--species_list",
-    type=str,
-    nargs="+",
-    required=True,
-    help="List of species to include in the training.",
-)
-parser.add_argument(
-    "--datatype",
-    type=str,
-    choices=["data", "data_5s"],
-    required=True,
-    help="Type of data to process (3 or 5 seconds).",
-)
-parser.add_argument(
-    "--model_name", type=str, default="BirdNET", help="Name of the model to use."
-)
-parser.add_argument(
-    "--batch_size", type=int, default=4, help="Batch size for training."
-)
-parser.add_argument(
-    "--folds", type=int, default=2, help="Number of folds for cross-validation."
-)
-parser.add_argument(
-    "--training_size",
-    type=int,
-    default=10,
-    help="Number of samples to use for training.",
-)
-parser.add_argument(
-    "--random_seed", type=int, default=1, help="Random seed for reproducibility."
-)
-parser.add_argument(
-    "--results_path",
-    type=str,
-    default="/workspaces/non-avian-ml-toy/results",
-    help="Path to save the results.",
-)
-
 def run_model(
     datapath,
     species_list,
@@ -308,6 +140,13 @@ def run_model(
             batch_size,
             folds,
         )
+    
+    if results is None:
+        print(
+            "Run was skipped due to insufficient samples. No results file was created."
+        )
+    else:
+        print("Run completed successfully.")
 
     return results
 
