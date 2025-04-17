@@ -1,6 +1,5 @@
 import torch
 import os
-from sklearn.metrics import roc_auc_score
 
 from data_loader import *
 
@@ -26,19 +25,3 @@ class ModelWrapper:
             batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
-    
-    def train_and_evaluate(
-        self, species, train_files, test_files, labels_train, labels_val
-    ):
-        """Train and evaluate the model for a single species."""
-        self.model.change_classes([species])
-        emb_train = self.embed_files(train_files)
-        emb_val = self.embed_files(test_files)
-
-        self.model.network.fit(emb_train, labels_train, emb_val, labels_val)
-        preds = (
-            self.model.network(torch.tensor(emb_val, dtype=torch.float32))
-            .detach()
-            .numpy()
-        )
-        return roc_auc_score(labels_val, preds, average=None)

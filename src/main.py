@@ -1,6 +1,5 @@
 from config import *
-from utils import *
-
+from app import *
 
 def main(args):
     run_model(
