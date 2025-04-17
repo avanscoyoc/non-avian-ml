@@ -1,5 +1,6 @@
 import torch
 import os
+from sklearn.metrics import roc_auc_score
 
 from data_loader import *
 
