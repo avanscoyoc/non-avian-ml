@@ -1,11 +1,8 @@
 
 # pixi environments
 .pixi
-
-__pycache__
-
+__pycache__ 
+__MACOSX
 data/
-
-__MACOSX/data/
-
 results/
+* data
