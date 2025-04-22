@@ -14,7 +14,6 @@ We will complete the following throughout this semester:
 - Experiment with new model architectures and data augmentation techniques
 - Write a report that compares approaches and results! :rocket:
 
-
 ## Development Container 
 
 Note: This repository contains a development container that can be used both locally with `VSCode`, on the cloud with `GitHub Codespaces`, or any combination of cloud backend and IDE using `DevPod`!
@@ -90,4 +89,22 @@ After the container builds, `Python` dependecies are installed by `pixi`, using 
 
 ```sh
 pixi add numpy
+```
+
+## Using the ONNX Audio Classifier
+
+### Retraining Commands
+
+To retrain a model on your species data:
+
+```bash
+pixi run python src/onnx_audio_classifier.py --species bullfrog --model resnet18
+```
+
+### Testing Commands
+
+To test a trained model on a batch of audio files:
+
+```bash
+pixi run python src/test_bullfrog_model.py --model bullfrog_resnet18_fold1.onnx --batch --input data/audio/bullfrog/data
 ```
