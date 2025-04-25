@@ -1,59 +1,35 @@
-from trainer import *
-from utils import *
+import os
+import argparse
 
+from training_loop import evaluate_model
+from config import parse_args
 
-def run_model(
-    datapath,
-    species_list,
-    datatype,
-    model_name,
-    batch_size,
-    folds,
-    training_size=None,
-    random_seed=42,
-    results_path="results",
-):
-    """Main function to train and evaluate species with optional random sampling."""
-    # Load data
-    data_loader = DataLoader(
-        datapath, species_list, datatype, training_size, random_seed
+def main(args):
+    # Run evaluation
+    results, fold_scores = evaluate_model(
+        model_name=args.model_name,
+        species_list=args.species_list,
+        training_size=args.training_size,
+        batch_size=args.batch_size,
+        n_folds=args.n_folds,
+        random_seed=args.random_seed,
+        datatype=args.datatype,
+        datapath=args.datapath,
+        results_path=args.results_path
     )
-
-    try:
-        df = data_loader.load_data()
-    except ValueError as e:
-        print(f"Error: {str(e)}")
-        print("Skipping this run due to insufficient samples.")
-        return None
-
-    # Initialize model and trainer
-    model_wrapper = ModelWrapper(model_name, batch_size)
-    trainer = Trainer(model_wrapper, folds)
-
-    # Train and evaluate for each species
-    results = {}
-    for species in species_list:
-        avg_roc_auc = trainer.train_and_evaluate_species(df, species)
-        results[species] = avg_roc_auc
-
-    # Save results only if we have valid results
-    if results:
-        result_manager = ResultManager(results_path)
-        result_manager.save_results(
-            results,
-            model_name,
-            species_list,
-            training_size,
-            random_seed,
-            batch_size,
-            folds,
-        )
     
-    if results is None:
-        print(
-            "Run was skipped due to insufficient samples. No results file was created."
-        )
-    else:
-        print("Run completed successfully.")
+    print(f"\nFinal Results:")
+    print(f"Model: {args.model_name}")
+    print(f"Data type: {args.datatype}")
+    print(f"Training size: {args.training_size}")
+    print("\nResults by species:")
+    for species, roc_auc in results.items():
+        print(f"{species}: Mean ROC-AUC = {roc_auc:.4f}")
+        for fold_idx, fold_score in enumerate(fold_scores[species]):
+            print(f"  Fold {fold_idx + 1}: {fold_score:.4f}")
 
     return results
+
+if __name__ == "__main__":
+    args = parse_args()
+    results = main(args)
