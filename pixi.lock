@@ -236,6 +236,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/87/20/199b8713428322a2f22b722c62b8cc278cc53dffa9705d744484b5035ee9/nvidia_nvtx_cu12-12.4.127-py3-none-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/7e/80/cab10959dc1faead58dc8384a781dfbf93cb4d33d50988f7a69f1b7c9bbe/oauthlib-3.2.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/dd/5b/c4f95dbe652d14aeba9afaceb177e9ffc48ac3c03048dd3f872f26f07e34/onnx-1.17.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/33/e6/8ab2a7e9f90615b62360a20405c465e676a36b5262f80b019ef2528c82c3/onnx2tf-1.26.9-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a9/fb/76597b77785b2012317ffdd817101ccfab784e2c125645d002c4c9cd377b/onnxruntime-1.21.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/2c/8b/90eb44a40476fa0e71e05a0283947cfd74a5d36121a11d926ad6f3193cc4/opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/73/19/b015300c8c96a84d6332c456e057c72d389baa6f71dde47038c93f38b6d5/opensoundscape-0.11.0-py3-none-any.whl
@@ -2689,6 +2690,11 @@ packages:
   - google-re2 ; extra == 'reference'
   - pillow ; extra == 'reference'
   requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/33/e6/8ab2a7e9f90615b62360a20405c465e676a36b5262f80b019ef2528c82c3/onnx2tf-1.26.9-py3-none-any.whl
+  name: onnx2tf
+  version: 1.26.9
+  sha256: 06d02e7dfe52ffdb898b5c1b4a2a2b4354e62d3bf830b82e629e99353aecef67
+  requires_python: '>=3.10'
 - pypi: https://files.pythonhosted.org/packages/a9/fb/76597b77785b2012317ffdd817101ccfab784e2c125645d002c4c9cd377b/onnxruntime-1.21.1-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
   name: onnxruntime
   version: 1.21.1
