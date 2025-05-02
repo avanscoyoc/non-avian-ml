@@ -73,39 +73,24 @@ class TorchModelWrapper(BaseModelWrapper):
 class BioacousticsModelWrapper(BaseModelWrapper):
     def __init__(self, model):
         super().__init__(model, model_type="bioacoustics")
-        self.species = None  # Will be set during k_fold_train
+        self.species = None
         self.batch_size = 32
-        self.num_workers = os.cpu_count() * 3 // 4  # Use 75% of CPU cores
+        self.num_workers = os.cpu_count() * 3 // 4
 
-    def train_and_predict(self, train_dataset, val_dataset, batch_size):
-        # Convert dataset to format expected by bioacoustics models
-        train_files = [x.strip() for x, _ in train_dataset]  # Ensure strings
-        val_files = [x.strip() for x, _ in val_dataset]  # Ensure strings
-        train_labels = [y for _, y in train_dataset]
-        val_labels = [y for _, y in val_dataset]
-
-        # Generate embeddings for a list of file paths
-        emb_train = self.model.embed(
-            train_files,
-            return_dfs=False,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
-        emb_val = self.model.embed(
-            val_files,
+    def embed_files(self, file_paths):
+        """Generate embeddings for a list of file paths."""
+        return self.model.embed(
+            file_paths,
             return_dfs=False,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
 
-        # Train on embeddings
+    def train_and_predict(self, emb_train, train_labels, emb_val, val_labels):
+        """Train on embeddings and predict."""
         self.model.change_classes([self.species])
         self.model.network.fit(emb_train, train_labels, emb_val, val_labels)
-        
-        # Get predictions
-        with torch.no_grad():
-            preds = self.model.network(torch.tensor(emb_val, dtype=torch.float32)).detach().numpy()
-        
+        preds = self.model.network(torch.tensor(emb_val, dtype=torch.float32)).detach().numpy()
         return preds
 
 
@@ -116,33 +101,37 @@ class Trainer:
         self.data_loader = data_loader
 
     def k_fold_train(self, df, species, batch_size=32):
-        print(f"Processing species: {species}")
         if isinstance(self.model_wrapper, BioacousticsModelWrapper):
             self.model_wrapper.species = species
-            
+
         file_paths = df.index.values
         labels = df[species].values
         skf = StratifiedKFold(n_splits=self.folds, shuffle=True, random_state=8)
         fold_scores = []
 
-        for fold_idx, (train_idx, val_idx) in enumerate(skf.split(file_paths, labels)):
+        for train_idx, val_idx in skf.split(file_paths, labels):
             train_df = df.iloc[train_idx]
             val_df = df.iloc[val_idx]
-            print(f"Fold {fold_idx + 1}")
 
-            train_dataset = self.data_loader.get_dataset(train_df, species, self.model_wrapper.model_type)
-            val_dataset = self.data_loader.get_dataset(val_df, species, self.model_wrapper.model_type)
+            if isinstance(self.model_wrapper, BioacousticsModelWrapper):
+                train_files = train_df.index.tolist()
+                val_files = val_df.index.tolist()
+                emb_train = self.model_wrapper.embed_files(train_files)
+                emb_val = self.model_wrapper.embed_files(val_files)
 
-            preds = self.model_wrapper.train_and_predict(train_dataset, val_dataset, batch_size)
-            y_true = val_df[species].values
+                train_labels = train_df[species].values.reshape(-1, 1)
+                val_labels = val_df[species].values.reshape(-1, 1)
 
-            roc_auc = roc_auc_score(y_true, preds)
-            print(f"ROC AUC for fold {fold_idx + 1}: {roc_auc:.4f}")
+                preds = self.model_wrapper.train_and_predict(emb_train, train_labels, emb_val, val_labels)
+            else:
+                train_dataset = self.data_loader.get_dataset(train_df, species, self.model_wrapper.model_type)
+                val_dataset = self.data_loader.get_dataset(val_df, species, self.model_wrapper.model_type)
+                preds = self.model_wrapper.train_and_predict(train_dataset, val_dataset, batch_size)
+
+            roc_auc = roc_auc_score(val_df[species].values, preds)
             fold_scores.append(roc_auc)
 
-        mean_roc_auc = np.mean(fold_scores)
-        print(f"Mean ROC AUC across {self.folds} folds: {mean_roc_auc:.4f}")
-        return mean_roc_auc, fold_scores
+        return np.mean(fold_scores), fold_scores
 
 
 def evaluate_model(model_name, species_list, training_size, batch_size, n_folds, 

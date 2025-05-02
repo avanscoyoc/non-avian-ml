@@ -144,10 +144,10 @@ class DataProcessor:
         """
         file_list = df.index.tolist()
         labels = df[species].tolist()
-        
+
         if model_type.lower() == "torch":
             return TorchAudioDataset(file_list, labels)
         elif model_type.lower() == "bioacoustics":
-            return BioacousticsDataset(file_list, labels)
+            return df
         else:
             raise ValueError(f"Unknown model type: {model_type}")
