@@ -4,6 +4,7 @@ import argparse
 from training_loop import evaluate_model
 from config import parse_args
 
+
 def main(args):
     # Run evaluation
     results, fold_scores = evaluate_model(
@@ -15,9 +16,10 @@ def main(args):
         random_seed=args.random_seed,
         datatype=args.datatype,
         datapath=args.datapath,
-        results_path=args.results_path
+        results_path=args.results_path,
+        gcs_bucket=args.gcs_bucket,
     )
-    
+
     print(f"\nFinal Results:")
     print(f"Model: {args.model_name}")
     print(f"Data type: {args.datatype}")
@@ -29,6 +31,7 @@ def main(args):
             print(f"  Fold {fold_idx + 1}: {fold_score:.4f}")
 
     return results
+
 
 if __name__ == "__main__":
     args = parse_args()
