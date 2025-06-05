@@ -6,9 +6,9 @@ from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader as TorchDataLoader
 from torch import nn, optim
 
-from model_loader import ModelLoader
-from data_processor import DataProcessor as CustomDataLoader
-from save_results import ResultsManager
+from src.model_loader import ModelLoader
+from src.data_processor import DataProcessor as CustomDataLoader
+from src.save_results import ResultsManager
 
 
 class BaseModelWrapper:

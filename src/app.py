@@ -2,8 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Union, Any
 import uvicorn
-from main import main
-from config import get_default_args
+from src.main import main
 
 app = FastAPI(
     title="Non-Avian ML Model API", description="API for running ML model evaluations"
@@ -33,7 +32,7 @@ class EvaluationResponse(BaseModel):
 async def evaluate(request: EvaluationRequest):
     try:
         # Run the evaluation
-        results, fold_scores = main(**request)
+        results, fold_scores = main(**request.dict())
         # Return structured response
         return {
             "results": results,
