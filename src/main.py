@@ -5,7 +5,9 @@ from training_loop import evaluate_model
 from config import parse_args
 
 
-def main(args):
+def main(model_name: str, species_list: list, training_size: float, batch_size: int,
+         n_folds: int, random_seed: int, datatype: str, datapath: str, results_path: str,
+         gcs_bucket: str) -> dict:
     # Run evaluation
     results, fold_scores = evaluate_model(
         model_name=args.model_name,
