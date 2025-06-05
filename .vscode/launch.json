@@ -3,7 +3,7 @@
     "configurations": [
         {
             "name": "FastAPI Development Server",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
             "args": [
