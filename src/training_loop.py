@@ -136,7 +136,7 @@ class Trainer:
 
 def evaluate_model(model_name, species_list, training_size, batch_size, n_folds, 
                   random_seed=42, datatype="data", datapath="/workspaces/non-avian-ml-toy/data/audio/", 
-                  results_path="/workspaces/non-avian-ml-toy/results",gcs_bucket="dse-staff-public/soundhub"):
+                  results_path="/workspaces/non-avian-ml-toy/results",gcs_bucket="dse-staff/soundhub"):
     """Main function to evaluate a model on multiple species datasets."""
     results = {}
     fold_scores_dict = {}

@@ -12,14 +12,14 @@ app = FastAPI(
 class EvaluationRequest(BaseModel):
     model_name: str
     species_list: List[str]
-    training_size: float = 0.8
-    batch_size: int = 32
-    n_folds: int = 5
-    random_seed: int = 42
-    datatype: str = "features"
-    datapath: Optional[str] = None
-    results_path: Optional[str] = None
-    gcs_bucket: Optional[str] = None
+    training_size: int = 10
+    batch_size: Optional[int] = 32
+    n_folds: Optional[int] = 5
+    random_seed: Optional[int] = 42
+    datatype: Optional[str] = "data"
+    datapath: Optional[str] = "/workspaces/non-avian-ml-toy/results"
+    results_path: Optional[str] = "/workspaces/non-avian-ml-toy/results"
+    gcs_bucket: Optional[str] = "dse-staff/soundhub"
 
 
 class EvaluationResponse(BaseModel):
