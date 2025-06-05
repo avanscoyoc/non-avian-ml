@@ -11,5 +11,5 @@ curl -X POST http://localhost:8080/evaluate \
       "datatype": "data", 
       "datapath": "/workspaces/non-avian-ml-toy/data/audio/",
       "results_path": "/workspaces/non-avian-ml-toy/results", 
-      "gcs_bucket": "dse-staff-public/soundhub"
+      "gcs_bucket": "dse-staff/soundhub"
     }'
