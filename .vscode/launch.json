@@ -1,16 +1,24 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Python: Extract Tables",
-      "type": "debugpy",
-      "request": "launch",
-      "cwd": "${workspaceFolder}",
-      "module": "src.extract_tables_from_pdf",
-      "justMyCode": false,
-      "pythonPath": "${cwd}/.pixi/envs/default/bin/python",
-      "args": ["--pdf", "data/input/Appendix_A_JOTR_Vegetation_Descriptions_2012.pdf", "--table_mapping_json", "data/input/table_mapping.json", "--output_csv_dir", "data/output"],
-      "envFile": "${workspaceFolder}/.devcontainer/.env"
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FastAPI Development Server",
+            "type": "python",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "src.app:app",
+                "--reload",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080"
+            ],
+            "jinja": true,
+            "justMyCode": true,
+            "env": {
+                "PYTHONPATH": "/workspaces/non-avian-ml-toy/.pixi/envs/default/bin/python"
+            }
+        }
+    ]
 }
