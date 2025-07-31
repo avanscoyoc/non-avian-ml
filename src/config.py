@@ -2,61 +2,57 @@ import argparse
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Evaluate audio classification models")
+    parser = argparse.ArgumentParser(description="Evaluate audio model")
+
+    # Required parameters
     parser.add_argument(
-        "--datapath",
+        "--model",
         type=str,
-        default="/workspaces/non-avian-ml-toy/data/audio/",
-        help="Path to the audio data directory.",
+        required=True,
+        choices=["resnet", "mobilenet", "vgg", "birdnet", "perch"],
+        help="Model to evaluate",
     )
     parser.add_argument(
-        "--species_list",
+        "--species",
         type=str,
         nargs="+",
         required=True,
-        help="List of species to evaluate the model on.",
+        help="Species to analyze",
     )
     parser.add_argument(
-        "--model_name",
-        type=str,
-        choices=["resnet", "mobilenet", "vgg", "birdnet", "perch"],
-        required=True,
-        help="Name of the model to evaluate.",
+        "--train_size", type=int, required=True, help="Training size to use"
     )
+
+    # Optional parameters
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--datatype",
         type=str,
         choices=["data", "data_5s"],
         default="data",
-        help="Type of data to process (3 or 5 seconds).",
+        help="Type of data to process",
     )
     parser.add_argument(
-        "--batch_size", type=int, default=32, help="Batch size for training."
+        "--batch_size", type=int, default=32, help="Batch size for training"
     )
+    parser.add_argument("--n_folds", type=int, default=5, help="Cross-validation folds")
     parser.add_argument(
-        "--training_size",
-        type=int,
-        default=10,
-        help="Number of samples per class (positive/negative) to use for training.",
-    )
-    parser.add_argument(
-        "--n_folds", type=int, default=2, help="Number of folds for cross-validation."
-    )
-    parser.add_argument(
-        "--random_seed", type=int, default=1, help="Random seed for reproducibility."
+        "--datapath",
+        type=str,
+        default="/workspaces/non-avian-ml-toy/data/audio/",
+        help="Path to audio data",
     )
     parser.add_argument(
         "--results_path",
         type=str,
         default="/workspaces/non-avian-ml-toy/results",
-        help="Path to save the evaluation results.",
+        help="Path to save results",
     )
     parser.add_argument(
         "--gcs_bucket",
         type=str,
-        default="dse-staff-public/soundhub",
-        help="Google Cloud Storage bucket path for saving results (e.g. 'dse-staff-public/soundhub')",
+        default="dse-staff/soundhub",
+        help="GCS bucket for results",
     )
 
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()

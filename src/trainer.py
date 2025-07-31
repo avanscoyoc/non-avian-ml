@@ -15,10 +15,10 @@ class BaseModelWrapper:
     def __init__(self, model, model_type):
         self.model = model
         self.model_type = model_type  # "torch" or "bioacoustics"
-        
+
     def train(self, train_data, train_labels, val_data, val_labels):
         raise NotImplementedError
-        
+
     def predict(self, val_data):
         raise NotImplementedError
 
@@ -32,7 +32,8 @@ class TorchModelWrapper(BaseModelWrapper):
         self.device = next(model.parameters()).device
 
     def train_and_predict(self, train_dataset, val_dataset, batch_size):
-        train_loader = TorchDataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        train_loader = TorchDataLoader(train_dataset,
+                                       batch_size=batch_size, shuffle=True)
         val_loader = TorchDataLoader(val_dataset, batch_size=batch_size)
 
         # Training loop
@@ -45,7 +46,7 @@ class TorchModelWrapper(BaseModelWrapper):
                 loss = self.criterion(output.squeeze(), target)
                 loss.backward()
                 self.optimizer.step()
-            
+
             # Validation
             self.model.eval()
             val_loss = 0
@@ -54,7 +55,7 @@ class TorchModelWrapper(BaseModelWrapper):
                     data, target = data.to(self.device), target.to(self.device).float()
                     output = self.model(data)
                     val_loss += self.criterion(output.squeeze(), target).item()
-            
+
             print(f'Epoch: {epoch+1}, Val Loss: {val_loss/len(val_loader):.4f}')
 
         # Prediction
@@ -66,7 +67,7 @@ class TorchModelWrapper(BaseModelWrapper):
                 output = self.model(data)
                 pred = torch.sigmoid(output).cpu().numpy()
                 predictions.extend(pred.squeeze())
-                
+
         return predictions
 
 
@@ -132,66 +133,3 @@ class Trainer:
             fold_scores.append(roc_auc)
 
         return np.mean(fold_scores), fold_scores
-
-
-def evaluate_model(model_name, species_list, training_size, batch_size, n_folds, 
-                  random_seed=42, datatype="data", datapath="/workspaces/non-avian-ml-toy/data/audio/", 
-                  results_path="/workspaces/non-avian-ml-toy/results",gcs_bucket="dse-staff/soundhub"):
-    """Main function to evaluate a model on multiple species datasets."""
-    results = {}
-    fold_scores_dict = {}
-    
-    for species in species_list:
-        print(f"\nEvaluating {species}...")
-        # Initialize data loader for current species
-        data_loader = CustomDataLoader(
-            datapath=datapath,
-            species_list=[species],
-            datatype=datatype,
-            training_size=training_size,
-            random_seed=random_seed
-        )
-        
-        # Load dataset
-        df = data_loader.load_data()
-        
-        # Initialize model
-        model = ModelLoader(
-            model_name=model_name,
-            num_classes=1  # Binary classification
-        )
-        
-        # Create appropriate wrapper based on model type
-        if model_name.lower() in ['birdnet', 'perch']:
-            wrapper = BioacousticsModelWrapper(model.get_model())
-        else:
-            wrapper = TorchModelWrapper(model.get_model())
-        
-        # Initialize trainer and perform k-fold training
-        trainer = Trainer(wrapper, n_folds, data_loader)
-        mean_roc_auc, fold_scores = trainer.k_fold_train(df, species, batch_size)
-        
-        # Store results for current species
-        results[species] = mean_roc_auc
-        fold_scores_dict[species] = fold_scores
-        
-        # Save individual species results
-        if results_path:
-            results_manager = ResultsManager(results_path)
-            species_results = {
-                "mean_roc_auc": mean_roc_auc,
-                "fold_scores": {i: score for i, score in enumerate(fold_scores)}
-            }
-            
-            results_manager.save_results(
-                results_dict=species_results,
-                model_name=model_name,
-                species=species,
-                datatype=datatype,
-                training_size=training_size,
-                batch_size=batch_size,
-                n_folds=n_folds
-            )
-    
-    return results, fold_scores_dict
-
