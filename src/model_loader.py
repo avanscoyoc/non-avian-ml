@@ -1,7 +1,7 @@
-import os
 import torch
 from torchvision import models
 import torch.nn as nn
+
 
 class ModelLoader:
     def __init__(self, model_name, num_classes=2):
@@ -29,7 +29,7 @@ class ModelLoader:
         model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         model.fc = nn.Linear(model.fc.in_features, self.num_classes)
         return model.to(self.device)
-    
+
     def _get_mobilenet(self):
         model = models.mobilenet_v2(pretrained=True)
         model.features[0][0] = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1, bias=False)

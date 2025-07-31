@@ -5,7 +5,7 @@ import pandas as pd
 import torchaudio
 import torchaudio.transforms as T
 import torch
-import numpy as np
+
 
 class AudioDataset:
     """Base class for audio datasets"""
@@ -16,11 +16,14 @@ class AudioDataset:
     def __len__(self):
         return len(self.files)
 
+
 class TorchAudioDataset(AudioDataset):
     """Dataset for PyTorch models (ResNet, MobileNet, VGG)"""
-    def __init__(self, files, labels, sample_rate=16000, n_mels=64, max_len=128):
+    def __init__(self, files, labels, sample_rate=16000,
+                 n_mels=64, max_len=128):
         super().__init__(files, labels)
-        self.mel_transform = T.MelSpectrogram(sample_rate=sample_rate, n_mels=n_mels)
+        self.mel_transform = T.MelSpectrogram(sample_rate=sample_rate, 
+                                              n_mels=n_mels)
         self.db_transform = T.AmplitudeToDB()
         self.max_len = max_len
 
@@ -40,12 +43,13 @@ class TorchAudioDataset(AudioDataset):
 
         return mel, self.labels[idx]
 
+
 class BioacousticsDataset(AudioDataset):
     """Dataset for bioacoustics models (BirdNET, Perch)"""
     def __init__(self, files, labels, sample_rate=48000):
         super().__init__(files, labels)
         self.sample_rate = sample_rate
-    
+
     def __getitem__(self, idx):
         waveform, sr = torchaudio.load(self.files[idx])
         if sr != self.sample_rate:
@@ -53,11 +57,13 @@ class BioacousticsDataset(AudioDataset):
             waveform = resampler(waveform)
         return waveform, self.labels[idx]
 
+
 class DataProcessor:
     """Handles loading and preprocessing of data."""
 
     def __init__(
-        self, datapath, species_list, datatype="data", training_size=None, random_seed=42
+        self, datapath, species_list, datatype="data",
+        training_size=None, random_seed=42
     ):
         self.datapath = datapath
         self.species_list = species_list
@@ -132,7 +138,6 @@ class DataProcessor:
         print(all_species.sum("index"))
         print(all_species.head())
         return all_species
-
 
     def get_dataset(self, df, species, model_type="torch"):
         """
