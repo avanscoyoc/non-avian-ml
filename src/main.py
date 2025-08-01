@@ -1,4 +1,5 @@
 import logging
+import os
 from .evaluate import evaluate_model
 from .save_results import ResultsManager
 from .config import parse_args
@@ -15,11 +16,16 @@ def run_experiment(
     n_folds: int = 5,
     random_seed: int = 42,
     datatype: str = "data",
-    datapath: str = "/workspaces/non-avian-ml-toy/data/audio/",
-    results_path: str = "/workspaces/non-avian-ml-toy/results",
-    gcs_bucket: str = "dse-staff/soundhub",
+    datapath: str = None,  # Make this optional
+    results_path: str = "/tmp/results",  # Use temp directory
+    gcs_bucket: str = None,  # Make this optional
 ) -> dict:
     """Run a single experiment with given parameters"""
+    # Use environment variables or defaults
+    datapath = datapath or os.getenv("DATA_PATH", "/tmp/data/audio")
+    gcs_bucket = gcs_bucket or os.getenv("GCS_BUCKET", "dse-staff")
+    gcs_prefix = os.getenv("GCS_PREFIX", "soundhub")
+
     try:
         results, fold_scores = evaluate_model(
             model_name=model_name,
@@ -59,9 +65,7 @@ if __name__ == "__main__":
         logger.info(f"Connected to GCP project: {client.project}")
 
         # Test bucket access
-        bucket_name = (
-            args.gcs_bucket.split("/")[0] if args.gcs_bucket else "dse-staff"
-        )
+        bucket_name = args.gcs_bucket.split("/")[0] if args.gcs_bucket else "dse-staff"
         bucket = client.bucket(bucket_name)
         try:
             bucket.exists()
