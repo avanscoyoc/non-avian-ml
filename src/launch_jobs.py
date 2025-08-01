@@ -1,7 +1,8 @@
 import itertools
+import os
 from google.cloud import run_v2
+from google.cloud import secretmanager
 import logging
-import json
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -9,9 +10,9 @@ logger = logging.getLogger(__name__)
 # Configuration for experiments
 EXPERIMENT_CONFIG = {
     "models": ["mobilenet", "birdnet"],
-    "species": ["coyote", "bullfrog", "woodhouses_toad"],
-    "train_sizes": [10, 20, 30],
-    "seeds": [1, 2, 3],
+    "species": ["coyote", "bullfrog"],
+    "train_sizes": [10, 20],
+    "seeds": [1, 2],
     "datatypes": ["data"],
     "batch_sizes": [32],
     "n_folds": [5],
@@ -61,21 +62,40 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
     client = run_v2.JobsClient()
     parent = f"projects/{project_id}/locations/{location}"
 
-    # Create job template
-    job = run_v2.Job()
-    job.template = run_v2.ExecutionTemplate()
+    # Get service account from Secret Manager
+    try:
+        secret_client = secretmanager.SecretManagerServiceClient()
+        secret_name = (
+            f"projects/{project_id}/secrets/cloud-run-service-account/versions/latest"
+        )
+        response = secret_client.access_secret_version(request={"name": secret_name})
+        service_account = response.payload.data.decode("UTF-8")
+    except Exception as e:
+        # Fallback to environment variable if secret not available
+        service_account = os.getenv(
+            "CLOUD_RUN_SERVICE_ACCOUNT",
+            "cloud-run-jobs@dse-staff.iam.gserviceaccount.com",  # default fallback
+        )
+        logger.warning(f"Using fallback service account: {str(e)}")
 
-    # Container configuration
-    container = run_v2.Container(
-        image="us-central1-docker.pkg.dev/dse-staff/non-avian-ml-toy/model:latest",
-        args=args,
-        resources=run_v2.ResourceRequirements(limits={"cpu": "2", "memory": "8Gi"}),
-    )
-    job.template.containers = [container]
-
-    # Service account for GCS access
-    service_account = "service-422941045810@gs-project-accounts.iam.gserviceaccount.com"
-    job.template.service_account = service_account
+    # Create job configuration
+    job = {
+        "template": {
+            "template": {
+                "containers": [
+                    {
+                        "image": (
+                            "us-central1-docker.pkg.dev/dse-staff/"
+                            "non-avian-ml-toy/model:latest"
+                        ),
+                        "args": args,
+                        "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
+                    }
+                ],
+                "service_account": service_account,
+            }
+        }
+    }
 
     # Create job with retry
     operation = client.create_job(parent=parent, job=job, job_id=job_id)
@@ -94,7 +114,10 @@ def main(project_id: str, location: str = "us-central1"):
             logger.info(f"Command: {' '.join(cmd)}")
 
             job = create_cloud_run_job(
-                project_id=project_id, location=location, args=cmd, job_id=job_id
+                project_id=project_id,
+                location=location,
+                args=cmd,
+                job_id=job_id,
             )
             logger.info(f"Launched job: {job.name}")
 
