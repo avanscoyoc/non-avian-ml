@@ -5,10 +5,12 @@ import pandas as pd
 import torchaudio
 import torchaudio.transforms as T
 import torch
+from google.cloud import storage
 
 
 class AudioDataset:
     """Base class for audio datasets"""
+
     def __init__(self, files, labels):
         self.files = files
         self.labels = labels
@@ -19,11 +21,10 @@ class AudioDataset:
 
 class TorchAudioDataset(AudioDataset):
     """Dataset for PyTorch models (ResNet, MobileNet, VGG)"""
-    def __init__(self, files, labels, sample_rate=16000,
-                 n_mels=64, max_len=128):
+
+    def __init__(self, files, labels, sample_rate=16000, n_mels=64, max_len=128):
         super().__init__(files, labels)
-        self.mel_transform = T.MelSpectrogram(sample_rate=sample_rate, 
-                                              n_mels=n_mels)
+        self.mel_transform = T.MelSpectrogram(sample_rate=sample_rate, n_mels=n_mels)
         self.db_transform = T.AmplitudeToDB()
         self.max_len = max_len
 
@@ -39,13 +40,14 @@ class TorchAudioDataset(AudioDataset):
             pad_len = self.max_len - mel.shape[-1]
             mel = torch.nn.functional.pad(mel, (0, pad_len))
         else:
-            mel = mel[:, :, :self.max_len]
+            mel = mel[:, :, : self.max_len]
 
         return mel, self.labels[idx]
 
 
 class BioacousticsDataset(AudioDataset):
     """Dataset for bioacoustics models (BirdNET, Perch)"""
+
     def __init__(self, files, labels, sample_rate=48000):
         super().__init__(files, labels)
         self.sample_rate = sample_rate
@@ -62,26 +64,59 @@ class DataProcessor:
     """Handles loading and preprocessing of data."""
 
     def __init__(
-        self, datapath, species_list, datatype="data",
-        training_size=None, random_seed=42
+        self,
+        datapath,
+        species_list,
+        datatype="data",
+        training_size=None,
+        random_seed=42,
+        gcs_bucket="dse-staff",
+        gcs_prefix="soundhub",
     ):
         self.datapath = datapath
         self.species_list = species_list
         self.datatype = datatype
         self.training_size = training_size
+        self.gcs_bucket = gcs_bucket
+        self.gcs_prefix = gcs_prefix
         random.seed(random_seed)
 
-    def sample_files(self, files, size, species, file_type="positive"):
-        """Helper method to sample files with proper error handling."""
-        if len(files) < size:
-            print(
-                f"Warning: Requested {size} {file_type} samples but only found {len(files)} for {species}"
-            )
-            return files
-        return random.sample(files, size)
+        # Ensure data directory exists
+        os.makedirs(datapath, exist_ok=True)
+
+    def download_data_from_gcs(self, species):
+        """Download species data from GCS"""
+        try:
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(self.gcs_bucket)
+
+            # Define paths
+            gcs_species_path = f"{self.gcs_prefix}/audio/{species}/{self.datatype}"
+            local_species_path = os.path.join(self.datapath, species, self.datatype)
+
+            # Create local directories
+            os.makedirs(os.path.join(local_species_path, "pos"), exist_ok=True)
+            os.makedirs(os.path.join(local_species_path, "neg"), exist_ok=True)
+
+            # Download files
+            blobs = bucket.list_blobs(prefix=gcs_species_path)
+            for blob in blobs:
+                if blob.name.endswith(".wav"):
+                    local_path = os.path.join(
+                        self.datapath, os.path.relpath(blob.name, self.gcs_prefix)
+                    )
+                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                    blob.download_to_filename(local_path)
+                    logger.info(f"Downloaded {blob.name} to {local_path}")
+
+            return True
+        except Exception as e:
+            logger.error(f"Error downloading data: {str(e)}")
+            return False
 
     def load_species_data(self, species):
-        """Load data for a single species with optional random sampling."""
+        """Load data for a single species with GCS fallback"""
+        # First try to find local files
         pos_files = glob.glob(
             os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
         )
@@ -89,7 +124,21 @@ class DataProcessor:
             os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
         )
 
-        # Check if we have enough samples before proceeding
+        # If no local files found, try downloading from GCS
+        if not pos_files or not neg_files:
+            logger.info(f"No local data found for {species}, downloading from GCS...")
+            if not self.download_data_from_gcs(species):
+                raise ValueError(f"Could not download data for {species} from GCS")
+
+            # Try loading files again after download
+            pos_files = glob.glob(
+                os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
+            )
+            neg_files = glob.glob(
+                os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
+            )
+
+        # Verify we have enough samples
         if self.training_size is not None:
             if (
                 len(pos_files) < self.training_size
@@ -156,3 +205,19 @@ class DataProcessor:
             return df
         else:
             raise ValueError(f"Unknown model type: {model_type}")
+
+    def download_from_gcs(self, bucket_name="dse-staff", prefix="soundhub"):
+        """Download dataset from GCS at runtime"""
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name)
+
+        # Create local data directory if it doesn't exist
+        os.makedirs("data", exist_ok=True)
+
+        # Download all blobs with the given prefix
+        blobs = bucket.list_blobs(prefix=prefix)
+        for blob in blobs:
+            if not blob.name.endswith("/"):  # Skip directories
+                local_path = blob.name
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                blob.download_to_filename(local_path)

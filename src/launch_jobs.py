@@ -1,8 +1,9 @@
 import itertools
 import os
 from google.cloud import run_v2
-from google.cloud import secretmanager
+from googleapiclient import discovery
 import logging
+import base64
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -57,6 +58,21 @@ def generate_job_commands():
     return commands
 
 
+def get_secret(project_id: str, secret_name: str):
+    """Get secret using Google API client instead of Cloud Secret Manager"""
+    try:
+        service = discovery.build("secretmanager", "v1", cache_discovery=False)
+        name = f"projects/{project_id}/secrets/{secret_name}/versions/latest"
+        response = service.projects().secrets().versions().access(name=name).execute()
+        return base64.b64decode(response["payload"]["data"]).decode("UTF-8")
+    except Exception as e:
+        logger.warning(f"Failed to get secret: {str(e)}")
+        return os.getenv(
+            "CLOUD_RUN_SERVICE_ACCOUNT",
+            "cloud-run-jobs@dse-staff.iam.gserviceaccount.com",
+        )
+
+
 def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str):
     """Create a Cloud Run job for a single experiment"""
     client = run_v2.JobsClient()
@@ -64,12 +80,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
 
     # Get service account from Secret Manager
     try:
-        secret_client = secretmanager.SecretManagerServiceClient()
-        secret_name = (
-            f"projects/{project_id}/secrets/cloud-run-service-account/versions/latest"
-        )
-        response = secret_client.access_secret_version(request={"name": secret_name})
-        service_account = response.payload.data.decode("UTF-8")
+        service_account = get_secret(project_id, "cloud-run-service-account")
     except Exception as e:
         # Fallback to environment variable if secret not available
         service_account = os.getenv(
@@ -90,6 +101,15 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                         ),
                         "args": args,
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
+                        "env": [
+                            {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
+                            {"name": "GCS_BUCKET", "value": "dse-staff"},
+                            {"name": "GCS_PREFIX", "value": "soundhub"},
+                            {
+                                "name": "DATA_PATH",
+                                "value": "/tmp/data/audio",
+                            },  # Use temp directory
+                        ],
                     }
                 ],
                 "service_account": service_account,

@@ -1,116 +1,121 @@
-# Training non-avian sound classifiers
+# Non-Avian ML Toy Project
 
-This is a toy example using the `opensoundscapes` package as a wrapper to create custom classifiers for models pre-trained with bird embeddings.  The bird models we will be using first are `BirdNet` and Google's `Perch` model.  
-
-### Next steps
-
-We will complete the following throughout this semester: 
-
-- Learn to run the exploratory notebook `train_on_embeddings.ipynb` to create and test a custom classifer
-- Create custom classifiers using ONNX formatted pre-trained models instead of `opensoundscapes`
-- Create an approach for using stratified k-fold cross validation on multiple audio sample directories
-- Refactor code to be a python module that runs on startup
-- Send jobs to a super computer for iteration with various parameters
-- Experiment with new model architectures and data augmentation techniques
-- Write a report that compares approaches and results! :rocket:
-
-## Development Container 
-
-Note: This repository contains a development container that can be used both locally with `VSCode`, on the cloud with `GitHub Codespaces`, or any combination of cloud backend and IDE using `DevPod`!
+A machine learning project for processing non-avian animal sounds using Cloud Run jobs.
 
 ## Prerequisites
 
-### Local
+- [Pixi](https://prefix.dev/) package manager
+- Google Cloud SDK
+- Access to Google Cloud project `dse-staff`
 
-- [VS Code](https://code.visualstudio.com/)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-- [VS Code Remote - Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
+## Setup & Authentication
 
-### Cloud
-
-- A GitHub account (for using GitHub Codespaces)
-
-OR
-
-- DevPod set up locally and configured to an appropriate cloud backend (more detail on this later!).
-
-
-## Getting Started
-
-### Using GitHub Codespaces
-
-1. Click the "Code" button on the repository page
-2. Select "Open with Codespaces"
-3. Click "New codespace" (you can change the machine type here as well)
-4. Wait for the environment to build and initialize
-
-### Using VS Code + Docker Locally
-
-1. Clone the repository:
-```sh
-git clone https://github.com/username/repo-name.git
-cd repo-name
+1. Clone the repository and change into the directory:
+```bash
+git clone https://github.com/yourusername/non-avian-ml-toy.git
+cd non-avian-ml-toy
 ```
 
-2. Open in VS Code:
-```sh
-code .
+2. Authenticate with Google Cloud:
+```bash
+# Login to Google Cloud
+gcloud auth login
+
+# Set the project
+gcloud config set project dse-staff
+
+# Verify the container image exists in Artifact Registry
+gcloud artifacts docker images describe \
+    us-central1-docker.pkg.dev/dse-staff/non-avian-ml-toy/model:latest
 ```
 
-3. When prompted "Reopen in Container", click "Reopen in Container"
-   - Or press `CMD + Shift + P`, type "Remote-Containers: Reopen in Container"
+3. Set up service account permissions:
+```bash
+# Grant Storage Object Viewer role
+gcloud projects add-iam-policy-binding dse-staff \
+    --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
+    --role="roles/storage.objectViewer"
+
+# Grant Storage Bucket Reader role
+gcloud projects add-iam-policy-binding dse-staff \
+    --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
+    --role="roles/storage.bucketViewer"
+```
+
+## Running the Project
+
+1. Initialize the Pixi environment:
+```bash
+pixi install
+```
+
+2. Launch the experiment jobs:
+```bash
+# First, create all jobs
+pixi run python src/launch_jobs.py --project-id dse-staff
+
+# Then execute jobs in parallel using gcloud
+gcloud beta run jobs list \
+  --project dse-staff \
+  --region us-central1 \
+  --format="value(name)" | \
+  xargs -I {} -P 10 gcloud run jobs execute {} \
+  --project dse-staff --region us-central1
+```
+
+## Monitoring Jobs
+
+Monitor the status of your jobs:
+```bash
+# List all job executions
+gcloud run executions list --project dse-staff --region us-central1
+
+# Get detailed status of a specific job
+gcloud run jobs describe JOB_NAME --project dse-staff --region us-central1
+```
 
 ## Project Structure
 
 ```
 .
-├── .devcontainer/          # Development container configuration
-├── .vscode/               # VS Code settings, primarily for debugger launch configs
-├── data/                  # Data storage - ignored by `git`!
-│   ├── audio/...
-├── exploratory/          # Jupyter notebooks for interactive work
-├── src/                  # Source code - sourced as a python module (incomplete)
-└── pixi.toml             # Pixi dependencies and settings
+├── src/
+│   ├── launch_jobs.py    # Cloud Run job launcher
+│   ├── main.py          # Main experiment runner
+│   └── ...
+├── pixi.toml           # Pixi package configuration
+└── README.md
 ```
 
-## Getting Data
+## Configuration
 
-Data can be stored in the `data/` directory. This directory is ignored by `git`, so you can store large files here without worrying about them being committed to the repository. This is useful for storing data that is too large to be stored in the repository, or for storing sensitive data that you don't want to share.
+Experiment configurations can be modified in `src/launch_jobs.py`:
 
-By default, we download the data used for this toy-ish example from a public GCP bucket, within `.devcontainer/scripts/post_create/download_input_data.sh`. This script is run by `.devcontainer/scripts/run_post_create.sh` after the container is created.
-
-## Managing Dependencies
-
-The container will automatically install all required system dependencies and Python packages during the build process.
-
-Additional system dependencies can be added to `.devcontainer/scripts/on_build/install_system_dependencies.sh` - or, to keep things cleaner, you can break up installs across multiple scripts. These will be called in order of their filenames, by `.devcontainer/scripts/run_on_build.sh`. This is performed during the `Docker` build process, so it's a good place to put things like `apt-get` installs.
-
-After the container builds, `Python` dependecies are installed by `pixi`, using the `pixi.toml` and `pixi.lock` files. In order to add a new dependency here, you can either add it manually to the `pixi.toml` file, or use the `pixi` CLI to add it. For example, to add `numpy`:
-
-```sh
-pixi add numpy
+```python
+EXPERIMENT_CONFIG = {
+    "models": ["mobilenet", "birdnet"],
+    "species": ["coyote", "bullfrog"],
+    "train_sizes": [10, 20],
+    "seeds": [1, 2],
+    "datatypes": ["data"],
+    "batch_sizes": [32],
+    "n_folds": [5],
+}
 ```
 
-## Using the ONNX Audio Classifier
+## Troubleshooting
 
-### Retraining Commands
+If jobs fail to execute, check:
+1. Service account permissions in Google Cloud Console
+2. Cloud Run job logs in Google Cloud Console
+3. GCS bucket access permissions
+4. Container image availability in Artifact Registry
 
-To retrain a model on your species data:
+## Contributing
 
-```bash
-pixi run python src/onnx_audio_classifier.py --species bullfrog --model resnet18
-```
+1. Create a new branch
+2. Make your changes
+3. Submit a pull request
 
-### Testing Commands
+## License
 
-To test a trained model on a batch of audio files:
-
-```bash
-pixi run python src/test_bullfrog_model.py --model bullfrog_resnet18_fold1.onnx --batch --input data/audio/bullfrog/data
-```
-
-### Example API Request:
-
-```
-curl -X POST http://localhost:8080/evaluate -H 'Content-Type: application/json' -d '{\"model_name\": \"test_model\", \"species_list\": [\"species1\", \"species2\"], \"training_size\": 0.8, \"batch_size\": 32, \"n_folds\": 5, \"random_seed\": 42, \"datatype\": \"features\"}'
-```
+[Add your license information here]
