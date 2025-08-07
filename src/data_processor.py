@@ -5,6 +5,7 @@ import pandas as pd
 import torchaudio
 import torchaudio.transforms as T
 import torch
+import numpy as np
 from google.cloud import storage
 
 
@@ -70,53 +71,54 @@ class DataProcessor:
         datatype="data",
         training_size=None,
         random_seed=42,
-        gcs_bucket="dse-staff",
-        gcs_prefix="soundhub",
+        gcs_bucket='dse-staff/soundhub',
     ):
         self.datapath = datapath
+        self.gcs_bucket = "dse-staff"
         self.species_list = species_list
         self.datatype = datatype
         self.training_size = training_size
-        self.gcs_bucket = gcs_bucket
-        self.gcs_prefix = gcs_prefix
         random.seed(random_seed)
 
-        # Ensure data directory exists
-        os.makedirs(datapath, exist_ok=True)
+    def download_gcs_folder(gcs_bucket, species_list, local_base_path="/workspaces/data2/"):
+        """
+        Downloads all objects under dse-staff/soundhub/data/{species_name}
+        from the specified GCS bucket to a local directory.
+        """
+        prefix = f"dse-staff/soundhub/data 2/{species_list}/"
 
-    def download_data_from_gcs(self, species):
-        """Download species data from GCS"""
-        try:
-            storage_client = storage.Client()
-            bucket = storage_client.bucket(self.gcs_bucket)
+        storage_client = storage.Client()
+        bucket = storage_client.get_bucket(gcs_bucket)
 
-            # Define paths
-            gcs_species_path = f"{self.gcs_prefix}/audio/{species}/{self.datatype}"
-            local_species_path = os.path.join(self.datapath, species, self.datatype)
+        # List all blobs with the specific prefix
+        blobs = bucket.list_blobs(prefix=prefix)
 
-            # Create local directories
-            os.makedirs(os.path.join(local_species_path, "pos"), exist_ok=True)
-            os.makedirs(os.path.join(local_species_path, "neg"), exist_ok=True)
+        for blob in blobs:
+            # Remove the prefix from the blob name to get a relative path
+            relative_path = blob.name[len(prefix):]
+            local_path = os.path.join(local_base_path, species_list, relative_path)
 
-            # Download files
-            blobs = bucket.list_blobs(prefix=gcs_species_path)
-            for blob in blobs:
-                if blob.name.endswith(".wav"):
-                    local_path = os.path.join(
-                        self.datapath, os.path.relpath(blob.name, self.gcs_prefix)
-                    )
-                    os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                    blob.download_to_filename(local_path)
-                    logger.info(f"Downloaded {blob.name} to {local_path}")
+            # Create directories if needed
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
 
-            return True
-        except Exception as e:
-            logger.error(f"Error downloading data: {str(e)}")
-            return False
+            # Download the file
+            blob.download_to_filename(local_path)
+            print(f"Downloaded {blob.name} to {local_path}")
+            
+
+    def sample_files(self, files, size, species, file_type="positive"):
+        """Helper method to sample files with proper error handling."""
+        if len(files) < size:
+            print(
+                f"Warning: Requested {size} {file_type} samples but only found {len(files)} for {species}"
+            )
+            return files
+        return random.sample(files, size)
 
     def load_species_data(self, species):
-        """Load data for a single species with GCS fallback"""
-        # First try to find local files
+        """Load data for a single species with optional random sampling."""
+        self.download_gcs_folder(self.gcs_bucket, self.datapath)
+
         pos_files = glob.glob(
             os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
         )
@@ -124,21 +126,7 @@ class DataProcessor:
             os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
         )
 
-        # If no local files found, try downloading from GCS
-        if not pos_files or not neg_files:
-            logger.info(f"No local data found for {species}, downloading from GCS...")
-            if not self.download_data_from_gcs(species):
-                raise ValueError(f"Could not download data for {species} from GCS")
-
-            # Try loading files again after download
-            pos_files = glob.glob(
-                os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
-            )
-            neg_files = glob.glob(
-                os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
-            )
-
-        # Verify we have enough samples
+        # Check if we have enough samples before proceeding
         if self.training_size is not None:
             if (
                 len(pos_files) < self.training_size
@@ -205,19 +193,3 @@ class DataProcessor:
             return df
         else:
             raise ValueError(f"Unknown model type: {model_type}")
-
-    def download_from_gcs(self, bucket_name="dse-staff", prefix="soundhub"):
-        """Download dataset from GCS at runtime"""
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
-
-        # Create local data directory if it doesn't exist
-        os.makedirs("data", exist_ok=True)
-
-        # Download all blobs with the given prefix
-        blobs = bucket.list_blobs(prefix=prefix)
-        for blob in blobs:
-            if not blob.name.endswith("/"):  # Skip directories
-                local_path = blob.name
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                blob.download_to_filename(local_path)

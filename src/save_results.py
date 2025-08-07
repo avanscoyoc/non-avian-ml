@@ -106,8 +106,6 @@ class ResultsManager:
 
         return filepath
 
-        return filepath
-
     def load_results(self, species=None, model_name=None):
         """
         Load results from CSV files with optional filtering.

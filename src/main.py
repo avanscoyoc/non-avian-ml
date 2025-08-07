@@ -1,8 +1,8 @@
 import logging
 import os
-from .evaluate import evaluate_model
-from .save_results import ResultsManager
-from .config import parse_args
+from evaluate import evaluate_model
+from save_results import ResultsManager
+from config import parse_args
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
