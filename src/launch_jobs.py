@@ -13,7 +13,7 @@ EXPERIMENT_CONFIG = {
     "models": ["mobilenet", "birdnet"],
     "species": ["coyote", "bullfrog"],
     "train_sizes": [10, 20],
-    "seeds": [1, 2],
+    "seeds": [1],
     "datatypes": ["data"],
     "batch_sizes": [32],
     "n_folds": [5],

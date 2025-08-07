@@ -24,7 +24,6 @@ def parse_args():
     )
 
     # Optional parameters
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument(
         "--datatype",
         type=str,
@@ -35,7 +34,13 @@ def parse_args():
     parser.add_argument(
         "--batch_size", type=int, default=32, help="Batch size for training"
     )
-    parser.add_argument("--n_folds", type=int, default=5, help="Cross-validation folds")
+    parser.add_argument(
+        "--n_folds",
+        type=int,
+        default=5,
+        help="Cross-validation folds"
+    )
+    parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument(
         "--datapath",
         type=str,

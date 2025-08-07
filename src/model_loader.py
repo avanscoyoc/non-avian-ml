@@ -43,7 +43,6 @@ class ModelLoader:
         return model.to(self.device)
 
     def _get_bioacoustics_model(self):
-        # Convert lowercase model names to correct case
         model_name = "BirdNET" if self.model_name == "birdnet" else "Perch"
         model = torch.hub.load(
             "kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True

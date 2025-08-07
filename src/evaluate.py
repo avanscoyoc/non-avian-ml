@@ -1,11 +1,12 @@
-from src.model_loader import ModelLoader
-from src.data_processor import DataProcessor as CustomDataLoader
-from src.trainer import *
-from src.save_results import ResultsManager
+from model_loader import ModelLoader
+from data_processor import DataProcessor as CustomDataLoader
+from trainer import *
+from save_results import ResultsManager
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 def evaluate_model(model_name, species_list, training_size,
                    batch_size, n_folds, random_seed=42, datatype="data",
@@ -15,7 +16,7 @@ def evaluate_model(model_name, species_list, training_size,
     """Main function to evaluate a model on multiple species datasets."""
     results = {}
     fold_scores_dict = {}
-    
+
     try:
         for species in species_list:
             logger.info(f"\nEvaluating {species}...")
@@ -72,5 +73,5 @@ def evaluate_model(model_name, species_list, training_size,
     except Exception as e:
         logger.error(f"Error in evaluate_model: {str(e)}")
         raise
-    
+
     return results, fold_scores_dict
