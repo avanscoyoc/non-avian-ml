@@ -1,9 +1,9 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'us-central1-docker.pkg.dev/dse-staff/non-avian-ml-toy/model:latest', '.']
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest', '.']
 
 images:
-  - 'us-central1-docker.pkg.dev/dse-staff/non-avian-ml-toy/model:latest'
+  - 'us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
