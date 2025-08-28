@@ -126,61 +126,39 @@ class DataProcessor:
         return temp_dir
 
     def download_gcs_folder(self, species):
-        """Downloads species data efficiently"""
-        cache_key = f"{species}_{self.datatype}"
-
-        if cache_key in self._downloaded_species:
-            self.logger.info(f"Using cached data for {species}")
-            return True
-
+        """Downloads species data from GCS bucket."""
         try:
-            # Correct GCS path construction
+            # Construct GCS path
             gcs_prefix = f"soundhub/data/audio/{species}/{self.datatype}"
-            temp_dir = self._create_temp_dir()
 
+            # Create temp directory for this species
+            temp_species_dir = os.path.join(self.datapath, species, self.datatype)
+            os.makedirs(temp_species_dir, exist_ok=True)
+
+            # Download files
             storage_client = storage.Client()
             bucket = storage_client.bucket(self.gcs_bucket)
 
-            # List all blobs first
+            # List and download blobs
             blobs = list(bucket.list_blobs(prefix=gcs_prefix))
             if not blobs:
                 raise ValueError(
-                    f"No data found in gs://{self.gcs_bucket}/{gcs_prefix}"
+                    f"No files found in gs://{self.gcs_bucket}/{gcs_prefix}"
                 )
 
-            # Separate pos/neg files
-            pos_blobs = [b for b in blobs if "/pos/" in b.name]
-            neg_blobs = [b for b in blobs if "/neg/" in b.name]
-
-            if not pos_blobs or not neg_blobs:
-                raise ValueError(f"Missing pos/neg data for {species}")
-
-            # Sample before downloading if training_size specified
-            if self.training_size:
-                pos_blobs = random.sample(
-                    pos_blobs, min(self.training_size, len(pos_blobs))
-                )
-                neg_blobs = random.sample(
-                    neg_blobs, min(self.training_size, len(neg_blobs))
-                )
-
-            # Download selected files
-            for blob in pos_blobs + neg_blobs:
+            for blob in blobs:
+                # Get relative path by removing prefix
                 relative_path = blob.name[len(gcs_prefix) :].lstrip("/")
-                local_path = os.path.join(temp_dir, relative_path)
+                local_path = os.path.join(temp_species_dir, relative_path)
+
+                # Create directories if needed
                 os.makedirs(os.path.dirname(local_path), exist_ok=True)
                 blob.download_to_filename(local_path)
 
-            self._downloaded_species.add(cache_key)
-            self.datapath = temp_dir  # Update path to temp directory
-
-            self.logger.info(
-                f"Downloaded {len(pos_blobs)} positive and {len(neg_blobs)} negative samples for {species}"
-            )
             return True
 
         except Exception as e:
-            self.logger.error(f"Download failed for {species}: {str(e)}")
+            logger.error(f"Failed to download {species}: {str(e)}")
             return False
 
     def load_species_data(self, species):

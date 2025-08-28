@@ -1,6 +1,6 @@
 # Non-Avian ML Project
 
-A machine learning project for processing non-avian animal sounds using Cloud Run jobs.
+A machine learning project for comparing model type performance on non-avian animal sounds using Cloud Run jobs.
 
 ## Prerequisites
 
@@ -10,30 +10,29 @@ A machine learning project for processing non-avian animal sounds using Cloud Ru
 
 ## Setup & Authentication
 
-1. Clone the repository and change into the directory:
+1. Clone the repository, set directory:
 ```bash
 git clone https://github.com/yourusername/non-avian-ml.git
 cd non-avian-ml
 ```
 
 2. Authenticate with Google Cloud:
-```bash
-# Login to Google Cloud and set up default credentials
-gcloud auth application-default login
 
-# Verify the container image exists in Artifact Registry
+Login to Google Cloud and set up default credentials
+```bash
+gcloud auth application-default login
+```
+Verify the container image exists in Artifact Registry
+```bash
 gcloud artifacts docker images describe \
     us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest
 ```
 
-3. Set up service account permissions:
+3. Set up service account permissions (storage viewer and bucket reader):
 ```bash
-# Grant Storage Object Viewer role
 gcloud projects add-iam-policy-binding dse-staff \
     --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
-    --role="roles/storage.objectViewer"
-
-# Grant Storage Bucket Reader role
+    --role="roles/storage.objectViewer" && \
 gcloud projects add-iam-policy-binding dse-staff \
     --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
     --role="roles/storage.bucketViewer"
@@ -46,42 +45,24 @@ gcloud projects add-iam-policy-binding dse-staff \
 ```bash
 pixi install
 ```
-
-2. Launch the experiment jobs:
+Option A. Launch single experiment example: 
 ```bash
-# First, create all jobs
-pixi run python src/launch_jobs.py --project-id dse-staff
-
-# Then execute jobs in parallel using gcloud
+export DATA_DIR="/tmp/data/audio" && \
+mkdir -p "${DATA_DIR}/coyote/data/"{pos,neg} && \
+gsutil -m cp "gs://dse-staff/soundhub/data/audio/coyote/data/pos/*" "${DATA_DIR}/coyote/data/pos/" && \
+gsutil -m cp "gs://dse-staff/soundhub/data/audio/coyote/data/neg/*" "${DATA_DIR}/coyote/data/neg/" && \
+pixi run python src/main.py --model mobilenet --species coyote --train_size 10 --seed 1 --datatype data --batch_size 32 --n_folds 2 --datapath "${DATA_DIR}" && \
+rm -rf "${DATA_DIR}" /tmp/results
+```
+Option B. Launch multi-model and species experiment to Cloud Run:
+```bash
+pixi run python src/launch_jobs.py --project-id dse-staff && \
 gcloud beta run jobs list \
   --project dse-staff \
   --region us-central1 \
   --format="value(name)" | \
   xargs -I {} -P 10 gcloud run jobs execute {} \
   --project dse-staff --region us-central1
-```
-
-## Monitoring Jobs
-
-Monitor the status of your jobs:
-```bash
-# List all job executions
-gcloud run jobs executions list --project dse-staff --region us-central1
-
-# Get detailed status of a specific job
-gcloud run jobs describe JOB_NAME --project dse-staff --region us-central1
-```
-
-## Project Structure
-
-```
-.
-├── src/
-│   ├── launch_jobs.py    # Cloud Run job launcher
-│   ├── main.py          # Main experiment runner
-│   └── ...
-├── pixi.toml           # Pixi package configuration
-└── README.md
 ```
 
 ## Configuration
@@ -100,6 +81,28 @@ EXPERIMENT_CONFIG = {
 }
 ```
 
+## Monitoring Jobs
+
+Monitor the status of your jobs:
+```bash
+gcloud run jobs executions list --project dse-staff --region us-central1
+```
+```bash
+gcloud run jobs describe JOB_NAME --project dse-staff --region us-central1
+```
+
+## Project Structure
+
+```
+.
+├── src/
+│   ├── launch_jobs.py    # Cloud Run job launcher
+│   ├── main.py          # Main experiment runner
+│   └── ...
+├── pixi.toml           # Pixi package configuration
+└── README.md
+```
+
 ## Troubleshooting
 
 If jobs fail to execute, check:
@@ -108,12 +111,6 @@ If jobs fail to execute, check:
 3. GCS bucket access permissions
 4. Container image availability in Artifact Registry
 
-## Contributing
-
-1. Create a new branch
-2. Make your changes
-3. Submit a pull request
-
 ## License
 
-[Add your license information here]
+to add...
