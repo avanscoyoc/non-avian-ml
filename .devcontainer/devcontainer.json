@@ -24,7 +24,7 @@
         "ms-toolsai.jupyter"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/workspaces/non-avian-ml-toy/.pixi/envs/default/bin/python",
+        "python.defaultInterpreterPath": "/workspaces/non-avian-ml/.pixi/envs/default/bin/python",
         "python.testing.pytestEnabled": true,
         "[python]": {
           "editor.formatOnSave": true,

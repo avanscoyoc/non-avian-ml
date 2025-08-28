@@ -8,11 +8,18 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def evaluate_model(model_name, species_list, training_size,
-                   batch_size, n_folds, random_seed=42, datatype="data",
-                   datapath="/workspaces/non-avian-ml-toy/data/audio/",
-                   results_path="/workspaces/non-avian-ml-toy/results",
-                   gcs_bucket="dse-staff/soundhub"):
+def evaluate_model(
+    model_name,
+    species_list,
+    training_size,
+    batch_size,
+    n_folds,
+    random_seed=42,
+    datatype="data",
+    datapath="/workspaces/non-avian-ml/data/audio/",
+    results_path="/workspaces/non-avian-ml/results",
+    gcs_bucket="dse-staff/soundhub",
+):
     """Main function to evaluate a model on multiple species datasets."""
     results = {}
     fold_scores_dict = {}
@@ -26,7 +33,7 @@ def evaluate_model(model_name, species_list, training_size,
             species_list=[species],
             datatype=datatype,
             training_size=training_size,
-            random_seed=random_seed
+            random_seed=random_seed,
         )
 
         # Load dataset
@@ -35,11 +42,11 @@ def evaluate_model(model_name, species_list, training_size,
         # Initialize model
         model = ModelLoader(
             model_name=model_name,
-            num_classes=1  # Binary classification
+            num_classes=1,  # Binary classification
         )
 
         # Create appropriate wrapper based on model type
-        if model_name.lower() in ['birdnet', 'perch']:
+        if model_name.lower() in ["birdnet", "perch"]:
             wrapper = BioacousticsModelWrapper(model.get_model())
         else:
             wrapper = TorchModelWrapper(model.get_model())
@@ -57,7 +64,7 @@ def evaluate_model(model_name, species_list, training_size,
             results_manager = ResultsManager(results_path)
             species_results = {
                 "mean_roc_auc": mean_roc_auc,
-                "fold_scores": {i: score for i, score in enumerate(fold_scores)}
+                "fold_scores": {i: score for i, score in enumerate(fold_scores)},
             }
 
             results_manager.save_results(
@@ -67,7 +74,7 @@ def evaluate_model(model_name, species_list, training_size,
                 datatype=datatype,
                 training_size=training_size,
                 batch_size=batch_size,
-                n_folds=n_folds
+                n_folds=n_folds,
             )
 
     except Exception as e:

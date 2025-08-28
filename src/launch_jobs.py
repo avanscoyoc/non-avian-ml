@@ -97,7 +97,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                     {
                         "image": (
                             "us-central1-docker.pkg.dev/dse-staff/"
-                            "non-avian-ml-toy/model:latest"
+                            "non-avian-ml/model:latest"
                         ),
                         "args": args,
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},

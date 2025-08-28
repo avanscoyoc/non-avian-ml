@@ -12,8 +12,8 @@ A machine learning project for processing non-avian animal sounds using Cloud Ru
 
 1. Clone the repository and change into the directory:
 ```bash
-git clone https://github.com/yourusername/non-avian-ml-toy.git
-cd non-avian-ml-toy
+git clone https://github.com/yourusername/non-avian-ml.git
+cd non-avian-ml
 ```
 
 2. Authenticate with Google Cloud:
@@ -26,7 +26,7 @@ gcloud config set project dse-staff
 
 # Verify the container image exists in Artifact Registry
 gcloud artifacts docker images describe \
-    us-central1-docker.pkg.dev/dse-staff/non-avian-ml-toy/model:latest
+    us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest
 ```
 
 3. Set up service account permissions:

@@ -7,9 +7,7 @@ from google.cloud import storage
 class ResultsManager:
     """Handles saving and managing model evaluation results for individual species."""
 
-    def __init__(
-        self, results_path="/workspaces/non-avian-ml-toy/results", use_gcs=False
-    ):
+    def __init__(self, results_path="/workspaces/non-avian-ml/results", use_gcs=False):
         """Initialize ResultsManager with results directory path."""
         self.results_path = results_path
         self.use_gcs = use_gcs

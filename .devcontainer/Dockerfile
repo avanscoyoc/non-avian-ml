@@ -13,6 +13,6 @@ RUN apt-get update && apt-get install -y \
     && apt-get update && apt-get install -y google-cloud-sdk \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspaces/non-avian-ml-toy
+WORKDIR /workspaces/non-avian-ml
 
 COPY pixi.toml pixi.lock ./

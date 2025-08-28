@@ -34,23 +34,18 @@ def parse_args():
     parser.add_argument(
         "--batch_size", type=int, default=32, help="Batch size for training"
     )
-    parser.add_argument(
-        "--n_folds",
-        type=int,
-        default=5,
-        help="Cross-validation folds"
-    )
+    parser.add_argument("--n_folds", type=int, default=5, help="Cross-validation folds")
     parser.add_argument("--seed", type=int, default=1, help="Random seed")
     parser.add_argument(
         "--datapath",
         type=str,
-        default="/workspaces/non-avian-ml-toy/data/audio/",
+        default="/workspaces/non-avian-ml/data/audio/",
         help="Path to audio data",
     )
     parser.add_argument(
         "--results_path",
         type=str,
-        default="/workspaces/non-avian-ml-toy/results",
+        default="/workspaces/non-avian-ml/results",
         help="Path to save results",
     )
     parser.add_argument(
