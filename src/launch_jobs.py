@@ -84,7 +84,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
         service_account = "cloud-run-jobs@dse-staff.iam.gserviceaccount.com"
         logger.warning(f"Using default service account: {str(e)}")
 
-    # Updated job configuration - removed ephemeral-storage limit
+    # Updated job configuration
     job = {
         "template": {
             "template": {
@@ -97,7 +97,11 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                             {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
                             {"name": "GCS_BUCKET", "value": "dse-staff"},
                             {"name": "GCS_PREFIX", "value": "soundhub"},
-                            {"name": "DATA_PATH", "value": "/tmp/data"},
+                            {
+                                "name": "DATA_PATH",
+                                "value": "/tmp/data",
+                            },  # Changed from /tmp/data/audio
+                            {"name": "PYTHONUNBUFFERED", "value": "1"},
                         ],
                     }
                 ],
