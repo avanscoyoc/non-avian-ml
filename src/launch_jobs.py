@@ -16,7 +16,7 @@ EXPERIMENT_CONFIG = {
     "seeds": [1],
     "datatypes": ["data"],
     "batch_sizes": [32],
-    "n_folds": [5],
+    "n_folds": [2],
 }
 
 
@@ -74,41 +74,30 @@ def get_secret(project_id: str, secret_name: str):
 
 
 def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str):
-    """Create a Cloud Run job for a single experiment"""
+    """Create a Cloud Run job with correct configuration"""
     client = run_v2.JobsClient()
     parent = f"projects/{project_id}/locations/{location}"
 
-    # Get service account from Secret Manager
     try:
         service_account = get_secret(project_id, "cloud-run-service-account")
     except Exception as e:
-        # Fallback to environment variable if secret not available
-        service_account = os.getenv(
-            "CLOUD_RUN_SERVICE_ACCOUNT",
-            "cloud-run-jobs@dse-staff.iam.gserviceaccount.com",  # default fallback
-        )
-        logger.warning(f"Using fallback service account: {str(e)}")
+        service_account = "cloud-run-jobs@dse-staff.iam.gserviceaccount.com"
+        logger.warning(f"Using default service account: {str(e)}")
 
-    # Create job configuration
+    # Updated job configuration - removed ephemeral-storage limit
     job = {
         "template": {
             "template": {
                 "containers": [
                     {
-                        "image": (
-                            "us-central1-docker.pkg.dev/dse-staff/"
-                            "non-avian-ml/model:latest"
-                        ),
+                        "image": "us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest",
                         "args": args,
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
                         "env": [
                             {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
                             {"name": "GCS_BUCKET", "value": "dse-staff"},
                             {"name": "GCS_PREFIX", "value": "soundhub"},
-                            {
-                                "name": "DATA_PATH",
-                                "value": "/tmp/data/audio",
-                            },  # Use temp directory
+                            {"name": "DATA_PATH", "value": "/tmp/data"},
                         ],
                     }
                 ],
@@ -118,8 +107,14 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
     }
 
     # Create job with retry
-    operation = client.create_job(parent=parent, job=job, job_id=job_id)
-    return operation.result()
+    try:
+        operation = client.create_job(
+            request={"parent": parent, "job": job, "job_id": job_id}
+        )
+        return operation.result()
+    except Exception as e:
+        logger.error(f"Failed to create job: {str(e)}")
+        raise
 
 
 def main(project_id: str, location: str = "us-central1"):

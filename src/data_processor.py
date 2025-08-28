@@ -7,6 +7,9 @@ import torchaudio.transforms as T
 import torch
 import numpy as np
 from google.cloud import storage
+import logging
+import tempfile
+import shutil
 
 
 class AudioDataset:
@@ -61,8 +64,35 @@ class BioacousticsDataset(AudioDataset):
         return waveform, self.labels[idx]
 
 
+class LazyAudioDataset(AudioDataset):
+    """Memory efficient dataset that loads audio files on demand."""
+
+    def __init__(self, files, labels, transform=None):
+        super().__init__(files, labels)
+        self.transform = transform
+        self._loaded_items = {}  # Small LRU cache for frequently accessed items
+
+    def __getitem__(self, idx):
+        if idx in self._loaded_items:
+            return self._loaded_items[idx]
+
+        # Load audio file only when needed
+        audio_path = self.files[idx]
+        waveform, sr = torchaudio.load(audio_path)
+
+        if self.transform:
+            waveform = self.transform(waveform)
+
+        # Cache result with limited size
+        if len(self._loaded_items) > 100:  # Keep only last 100 items
+            self._loaded_items.clear()
+        self._loaded_items[idx] = (waveform, self.labels[idx])
+
+        return waveform, self.labels[idx]
+
+
 class DataProcessor:
-    """Handles loading and preprocessing of data."""
+    """Handles loading and preprocessing of data with caching."""
 
     def __init__(
         self,
@@ -71,62 +101,116 @@ class DataProcessor:
         datatype="data",
         training_size=None,
         random_seed=42,
-        gcs_bucket='dse-staff/soundhub',
+        gcs_bucket="dse-staff",
     ):
         self.datapath = datapath
-        self.gcs_bucket = "dse-staff"
+        self.gcs_bucket = gcs_bucket
         self.species_list = species_list
-        self.datatype = datatype
+        self.datatype = datatype  # Keeping datatype for data vs data_5s
         self.training_size = training_size
+        self._cache = {}  # Cache for processed data
+        self._downloaded_species = set()  # Track downloaded species
+        self.temp_dirs = []  # Track temp directories for cleanup
+
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
+        logging.basicConfig(level=logging.INFO)
+
         random.seed(random_seed)
+        os.makedirs(datapath, exist_ok=True)
 
-    def download_gcs_folder(gcs_bucket, species_list, local_base_path="/workspaces/data2/"):
-        """
-        Downloads all objects under dse-staff/soundhub/data/{species_name}
-        from the specified GCS bucket to a local directory.
-        """
-        prefix = f"dse-staff/soundhub/data 2/{species_list}/"
+    def _create_temp_dir(self):
+        """Create a temporary directory that will be cleaned up."""
+        temp_dir = tempfile.mkdtemp(prefix="audio_data_")
+        self.temp_dirs.append(temp_dir)
+        return temp_dir
 
-        storage_client = storage.Client()
-        bucket = storage_client.get_bucket(gcs_bucket)
+    def download_gcs_folder(self, species):
+        """Downloads species data efficiently"""
+        cache_key = f"{species}_{self.datatype}"
 
-        # List all blobs with the specific prefix
-        blobs = bucket.list_blobs(prefix=prefix)
+        if cache_key in self._downloaded_species:
+            self.logger.info(f"Using cached data for {species}")
+            return True
 
-        for blob in blobs:
-            # Remove the prefix from the blob name to get a relative path
-            relative_path = blob.name[len(prefix):]
-            local_path = os.path.join(local_base_path, species_list, relative_path)
+        try:
+            # Correct GCS path construction
+            gcs_prefix = f"soundhub/data/audio/{species}/{self.datatype}"
+            temp_dir = self._create_temp_dir()
 
-            # Create directories if needed
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            storage_client = storage.Client()
+            bucket = storage_client.bucket(self.gcs_bucket)
 
-            # Download the file
-            blob.download_to_filename(local_path)
-            print(f"Downloaded {blob.name} to {local_path}")
-            
+            # List all blobs first
+            blobs = list(bucket.list_blobs(prefix=gcs_prefix))
+            if not blobs:
+                raise ValueError(
+                    f"No data found in gs://{self.gcs_bucket}/{gcs_prefix}"
+                )
 
-    def sample_files(self, files, size, species, file_type="positive"):
-        """Helper method to sample files with proper error handling."""
-        if len(files) < size:
-            print(
-                f"Warning: Requested {size} {file_type} samples but only found {len(files)} for {species}"
+            # Separate pos/neg files
+            pos_blobs = [b for b in blobs if "/pos/" in b.name]
+            neg_blobs = [b for b in blobs if "/neg/" in b.name]
+
+            if not pos_blobs or not neg_blobs:
+                raise ValueError(f"Missing pos/neg data for {species}")
+
+            # Sample before downloading if training_size specified
+            if self.training_size:
+                pos_blobs = random.sample(
+                    pos_blobs, min(self.training_size, len(pos_blobs))
+                )
+                neg_blobs = random.sample(
+                    neg_blobs, min(self.training_size, len(neg_blobs))
+                )
+
+            # Download selected files
+            for blob in pos_blobs + neg_blobs:
+                relative_path = blob.name[len(gcs_prefix) :].lstrip("/")
+                local_path = os.path.join(temp_dir, relative_path)
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                blob.download_to_filename(local_path)
+
+            self._downloaded_species.add(cache_key)
+            self.datapath = temp_dir  # Update path to temp directory
+
+            self.logger.info(
+                f"Downloaded {len(pos_blobs)} positive and {len(neg_blobs)} negative samples for {species}"
             )
-            return files
-        return random.sample(files, size)
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Download failed for {species}: {str(e)}")
+            return False
 
     def load_species_data(self, species):
-        """Load data for a single species with optional random sampling."""
-        self.download_gcs_folder(self.gcs_bucket, self.datapath)
+        """Load species data with caching for different training sizes."""
+        cache_key = f"{species}_{self.datatype}_{self.training_size}"
 
-        pos_files = glob.glob(
-            os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
-        )
-        neg_files = glob.glob(
-            os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
-        )
+        # Check cache first
+        if cache_key in self._cache:
+            self.logger.info(
+                f"Using cached data for {species}/{self.datatype} ({self.training_size} samples)"
+            )
+            return self._cache[cache_key]
 
-        # Check if we have enough samples before proceeding
+        # Download if needed
+        if not self.download_gcs_folder(species):
+            raise RuntimeError(f"Failed to download data for {species}/{self.datatype}")
+
+        # Get file paths
+        pos_path = os.path.join(self.datapath, species, self.datatype, "pos", "*.wav")
+        neg_path = os.path.join(self.datapath, species, self.datatype, "neg", "*.wav")
+
+        pos_files = sorted(glob.glob(pos_path))  # Sort for deterministic sampling
+        neg_files = sorted(glob.glob(neg_path))
+
+        if not pos_files or not neg_files:
+            raise ValueError(
+                f"No audio files found for {species} at {pos_path} or {neg_path}"
+            )
+
+        # Sample if training_size specified
         if self.training_size is not None:
             if (
                 len(pos_files) < self.training_size
@@ -134,31 +218,25 @@ class DataProcessor:
             ):
                 raise ValueError(
                     f"Insufficient samples for {species}: "
-                    f"Found {len(pos_files)} positive and {len(neg_files)} negative samples, "
-                    f"but {self.training_size} samples were requested."
+                    f"pos={len(pos_files)}, neg={len(neg_files)}, "
+                    f"requested={self.training_size}"
                 )
 
-        if self.training_size is not None:
-            min_samples = min(len(pos_files), len(neg_files))
-            training_size = min(self.training_size, min_samples)
-            pos_files = self.sample_files(pos_files, training_size, species, "positive")
-            neg_files = self.sample_files(neg_files, training_size, species, "negative")
+            pos_files = random.sample(pos_files, self.training_size)
+            neg_files = random.sample(neg_files, self.training_size)
 
-            print(
-                f"Using {len(pos_files)} positive and {len(neg_files)} negative samples for {species}"
-            )
-
-        all_files = pos_files + neg_files
-        encoding_pos_files = [1] * len(pos_files) + [0] * len(neg_files)
-        encoding_neg_files = [0] * len(pos_files) + [1] * len(neg_files)
-
-        return pd.DataFrame(
+        # Create DataFrame
+        df = pd.DataFrame(
             {
-                "files": all_files,
-                species: encoding_pos_files,
-                "noise": encoding_neg_files,
+                "files": pos_files + neg_files,
+                species: [1] * len(pos_files) + [0] * len(neg_files),
+                "noise": [0] * len(pos_files) + [1] * len(neg_files),
             }
         )
+
+        # Cache results
+        self._cache[cache_key] = df
+        return df
 
     def load_data(self):
         """Load data for all species."""
@@ -193,3 +271,11 @@ class DataProcessor:
             return df
         else:
             raise ValueError(f"Unknown model type: {model_type}")
+
+    def __del__(self):
+        """Cleanup temporary directories on object destruction."""
+        for temp_dir in self.temp_dirs:
+            try:
+                shutil.rmtree(temp_dir)
+            except Exception as e:
+                self.logger.warning(f"Failed to cleanup {temp_dir}: {str(e)}")

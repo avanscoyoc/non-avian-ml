@@ -1,4 +1,4 @@
-# Non-Avian ML Toy Project
+# Non-Avian ML Project
 
 A machine learning project for processing non-avian animal sounds using Cloud Run jobs.
 
@@ -18,11 +18,8 @@ cd non-avian-ml
 
 2. Authenticate with Google Cloud:
 ```bash
-# Login to Google Cloud
-gcloud auth login
-
-# Set the project
-gcloud config set project dse-staff
+# Login to Google Cloud and set up default credentials
+gcloud auth application-default login
 
 # Verify the container image exists in Artifact Registry
 gcloud artifacts docker images describe \
@@ -45,6 +42,7 @@ gcloud projects add-iam-policy-binding dse-staff \
 ## Running the Project
 
 1. Initialize the Pixi environment:
+(Not necessary if opened in Container in VS Code)
 ```bash
 pixi install
 ```
@@ -68,7 +66,7 @@ gcloud beta run jobs list \
 Monitor the status of your jobs:
 ```bash
 # List all job executions
-gcloud run executions list --project dse-staff --region us-central1
+gcloud run jobs executions list --project dse-staff --region us-central1
 
 # Get detailed status of a specific job
 gcloud run jobs describe JOB_NAME --project dse-staff --region us-central1
