@@ -74,7 +74,7 @@ def get_secret(project_id: str, secret_name: str):
 
 
 def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str):
-    """Create a Cloud Run job with correct configuration"""
+    """Create a Cloud Run job configured to use cloud_runner.py"""
     client = run_v2.JobsClient()
     parent = f"projects/{project_id}/locations/{location}"
 
@@ -84,24 +84,27 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
         service_account = "cloud-run-jobs@dse-staff.iam.gserviceaccount.com"
         logger.warning(f"Using default service account: {str(e)}")
 
-    # Updated job configuration
+    # Updated job configuration to use cloud_runner.py
     job = {
         "template": {
             "template": {
                 "containers": [
                     {
                         "image": "us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest",
-                        "args": args,
+                        "command": ["/bin/sh", "-c"],
+                        "args": [
+                            "ls -la /workspaces/non-avian-ml/src/ && "  # Debug: check files
+                            "python3 -u /workspaces/non-avian-ml/src/cloud_runner.py "
+                            + " ".join(args)
+                        ],
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
                         "env": [
                             {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
                             {"name": "GCS_BUCKET", "value": "dse-staff"},
                             {"name": "GCS_PREFIX", "value": "soundhub"},
-                            {
-                                "name": "DATA_PATH",
-                                "value": "/tmp/data",
-                            },  # Changed from /tmp/data/audio
+                            {"name": "DATA_PATH", "value": "/tmp/data"},
                             {"name": "PYTHONUNBUFFERED", "value": "1"},
+                            {"name": "PYTHONPATH", "value": "/workspaces/non-avian-ml"},
                         ],
                     }
                 ],
