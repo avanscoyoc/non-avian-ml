@@ -11,8 +11,8 @@ logger = logging.getLogger(__name__)
 # Configuration for experiments
 EXPERIMENT_CONFIG = {
     "models": ["mobilenet", "birdnet"],
-    "species": ["coyote", "bullfrog"],
-    "train_sizes": [10, 20],
+    "species": ["coyote"],
+    "train_sizes": [10],
     "seeds": [1],
     "datatypes": ["data"],
     "batch_sizes": [32],
@@ -34,7 +34,6 @@ def generate_job_commands():
 
     commands = []
     for model, species, train_size, seed, datatype, batch_size, n_folds in combinations:
-        # Generate list of arguments for the container
         cmd = [
             "--model",
             model,
@@ -93,8 +92,8 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                         "image": "us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest",
                         "command": ["/bin/sh", "-c"],
                         "args": [
-                            "ls -la /workspaces/non-avian-ml/src/ && "  # Debug: check files
-                            "python3 -u /workspaces/non-avian-ml/src/cloud_runner.py "
+                            "git clone https://github.com/avanscoyoc/non-avian-ml.git &&"
+                            "python3 -u non-avian-ml/src/cloud_runner.py "
                             + " ".join(args)
                         ],
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
