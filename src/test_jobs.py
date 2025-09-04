@@ -8,55 +8,6 @@ import base64
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuration for experiments
-EXPERIMENT_CONFIG = {
-    "models": ["mobilenet", "birdnet"],
-    "species": ["coyote"],
-    "train_sizes": [10],
-    "seeds": [1],
-    "datatypes": ["data"],
-    "batch_sizes": [32],
-    "n_folds": [2],
-}
-
-
-def generate_job_commands():
-    """Generate all experiment combinations as command line arguments"""
-    combinations = itertools.product(
-        EXPERIMENT_CONFIG["models"],
-        EXPERIMENT_CONFIG["species"],
-        EXPERIMENT_CONFIG["train_sizes"],
-        EXPERIMENT_CONFIG["seeds"],
-        EXPERIMENT_CONFIG["datatypes"],
-        EXPERIMENT_CONFIG["batch_sizes"],
-        EXPERIMENT_CONFIG["n_folds"],
-    )
-
-    commands = []
-    for model, species, train_size, seed, datatype, batch_size, n_folds in combinations:
-        cmd = [
-            "--model",
-            model,
-            "--species",
-            species,
-            "--train_size",
-            str(train_size),
-            "--seed",
-            str(seed),
-            "--datatype",
-            datatype,
-            "--batch_size",
-            str(batch_size),
-            "--n_folds",
-            str(n_folds),
-            "--gcs_bucket",
-            "dse-staff/soundhub",
-        ]
-        commands.append(cmd)
-
-    return commands
-
-
 def get_secret(project_id: str, secret_name: str):
     """Get secret using Google API client instead of Cloud Secret Manager"""
     try:
@@ -72,8 +23,7 @@ def get_secret(project_id: str, secret_name: str):
         )
 
 
-def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str):
-    """Create a Cloud Run job configured to use cloud_runner.py"""
+def create_cloud_run_job(project_id: str, location: str, job_id: str):
     client = run_v2.JobsClient()
     parent = f"projects/{project_id}/locations/{location}"
 
@@ -83,7 +33,6 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
         service_account = "cloud-run-jobs@dse-staff.iam.gserviceaccount.com"
         logger.warning(f"Using default service account: {str(e)}")
 
-    # Updated job configuration to use cloud_runner.py
     job = {
         "template": {
             "template": {
@@ -93,8 +42,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                         "command": ["/bin/sh", "-c"],
                         "args": [
                             "git clone https://github.com/avanscoyoc/non-avian-ml.git &&"
-                            "python3 -u non-avian-ml/src/cloud_runner.py "
-                            + " ".join(args)
+                            "python3 -u non-avian-ml/src/test.py"
                         ],
                         "resources": {"limits": {"cpu": "2", "memory": "8Gi"}},
                         "env": [
@@ -124,29 +72,13 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
 
 
 def main(project_id: str, location: str = "us-central1"):
-    """Launch all experiment jobs to Cloud Run"""
-    commands = generate_job_commands()
-    logger.info(f"Generated {len(commands)} experiment commands")
-
-    for i, cmd in enumerate(commands):
-        try:
-            job_id = f"ml-experiment-{int(time.time())}-{i}"
-            logger.info(f"Launching job {i + 1}/{len(commands)}")
-            logger.info(f"Command: {' '.join(cmd)}")
-
-            job = create_cloud_run_job(
-                project_id=project_id,
-                location=location,
-                args=cmd,
-                job_id=job_id,
-            )
-            logger.info(f"Launched job: {job.name}")
-
-            # Add a small delay between job submissions
-            time.sleep(1)
-
-        except Exception as e:
-            logger.error(f"Error launching job {i + 1}: {str(e)}")
+    job_id = f"ml-experiment-{int(time.time())}-{1}"
+    job = create_cloud_run_job(
+        project_id=project_id,
+        location=location,
+        job_id=job_id,
+    )
+    logger.info(f"Launched job: {job.name}")
 
 
 if __name__ == "__main__":

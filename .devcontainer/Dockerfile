@@ -3,6 +3,7 @@ FROM ghcr.io/prefix-dev/pixi:0.41.4-bullseye-slim
 
 RUN apt-get update && apt-get install -y \
     curl \
+    git \
     apt-transport-https \
     ca-certificates \
     gnupg \
