@@ -17,3 +17,5 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /workspaces/non-avian-ml
 
 COPY pixi.toml pixi.lock ./
+
+RUN pixi install
