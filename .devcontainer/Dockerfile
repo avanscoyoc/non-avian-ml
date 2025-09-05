@@ -18,4 +18,4 @@ WORKDIR /workspaces/non-avian-ml
 
 COPY pixi.toml pixi.lock ./
 
-RUN pixi install 
+RUN pixi install

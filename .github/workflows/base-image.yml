@@ -13,20 +13,23 @@ jobs:
       # Free up disk space for large images
       - name: Cleanup disk space
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+
       - uses: actions/checkout@v3
 
-      # Login to registry (Docker Hub / GHCR / GCP / etc.)
-      - name: Login to container registry
-        uses: docker/login-action@v3
+      # Authenticate to Google Cloud
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          registry: ${{ secrets.REGISTRY_URL }}
-          username: ${{ secrets.REGISTRY_USERNAME }}
-          password: ${{ secrets.REGISTRY_PASSWORD }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Configure Docker for Artifact Registry
+      - name: Configure Docker
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
 
       # Build Docker image with both tags
       - name: Build Docker image
         run: |
-          IMAGE=${{ secrets.REGISTRY_URL }}/dse-staff/non-avian-ml/model
+          IMAGE=us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model
           docker build base \
             --tag $IMAGE:latest \
             --tag $IMAGE:${{ github.sha }}
@@ -34,6 +37,6 @@ jobs:
       # Push both tags
       - name: Push Docker image
         run: |
-          IMAGE=${{ secrets.REGISTRY_URL }}/dse-staff/non-avian-ml/model
+          IMAGE=us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model
           docker push $IMAGE:latest
           docker push $IMAGE:${{ github.sha }}
