@@ -22,7 +22,6 @@ def get_secret(project_id: str, secret_name: str):
             "cloud-run-jobs@dse-staff.iam.gserviceaccount.com",
         )
 
-
 def create_cloud_run_job(project_id: str, location: str, job_id: str):
     client = run_v2.JobsClient()
     parent = f"projects/{project_id}/locations/{location}"
