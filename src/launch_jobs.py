@@ -93,7 +93,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                         "command": ["/bin/sh", "-c"],
                         "args": [
                             "git clone https://github.com/avanscoyoc/non-avian-ml.git &&"
-                            "pixi install"
+                            "pixi install &&"
                             "pixi run python3 -u non-avian-ml/src/cloud_runner.py "
                             + " ".join(args)
                         ],
