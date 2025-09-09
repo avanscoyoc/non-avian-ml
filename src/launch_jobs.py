@@ -97,7 +97,7 @@ def create_cloud_run_job(project_id: str, location: str, args: list, job_id: str
                             "pixi run python3 -u non-avian-ml/src/cloud_runner.py "
                             + " ".join(args)
                         ],
-                        "resources": {"limits": {"cpu": "2", "memory": "32Gi"}},
+                        "resources": {"limits": {"cpu": "8.0", "memory": "32Gi"}},
                         "env": [
                             {"name": "GOOGLE_CLOUD_PROJECT", "value": project_id},
                             {"name": "GCS_BUCKET", "value": "dse-staff"},
