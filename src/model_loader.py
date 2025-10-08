@@ -12,13 +12,13 @@ class ModelLoader:
 
     def get_model(self):
         if self.model is None:
-            if self.model_name == 'resnet':
+            if self.model_name == "resnet":
                 self.model = self._get_resnet()
-            elif self.model_name == 'mobilenet':
+            elif self.model_name == "mobilenet":
                 self.model = self._get_mobilenet()
-            elif self.model_name == 'vgg':
+            elif self.model_name == "vgg":
                 self.model = self._get_vgg()
-            elif self.model_name in ['birdnet', 'perch']:
+            elif self.model_name in ["birdnet", "perch"]:
                 self.model = self._get_bioacoustics_model()
             else:
                 raise ValueError(f"Unknown model: {self.model_name}")
@@ -32,8 +32,12 @@ class ModelLoader:
 
     def _get_mobilenet(self):
         model = models.mobilenet_v2(pretrained=True)
-        model.features[0][0] = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1, bias=False)
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, self.num_classes)
+        model.features[0][0] = nn.Conv2d(
+            1, 32, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        model.classifier[1] = nn.Linear(
+            model.classifier[1].in_features, self.num_classes
+        )
         return model.to(self.device)
 
     def _get_vgg(self):
@@ -45,7 +49,7 @@ class ModelLoader:
     def _get_bioacoustics_model(self):
         model_name = "BirdNET" if self.model_name == "birdnet" else "Perch"
         model = torch.hub.load(
-            "kitzeslab/bioacoustics-model-zoo", model_name, trust_repo=True
+            "kitzeslab/bioacoustics-model-zoo:0.11.0", model_name, trust_repo=True
         )
         return model.to(self.device)
 
