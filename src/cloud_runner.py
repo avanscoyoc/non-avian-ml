@@ -1,8 +1,8 @@
 import os
 import logging
-from config import parse_args
-from evaluate import evaluate_model
-from save_results import ResultsManager
+from .config import parse_args
+from .evaluate import evaluate_model
+from .save_results import ResultsManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,10 +38,24 @@ def run_cloud_experiment(
         )
 
         # Save results to GCS
-        results_manager = ResultsManager(
-            gcs_bucket=gcs_bucket, gcs_prefix=f"{gcs_prefix}/results"
-        )
-        results_manager.save_results(results, fold_scores)
+        # Create results manager - FIXED: only pass supported parameters
+        results_manager = ResultsManager(results_path="/tmp/results", use_gcs=True)
+
+        # Combine bucket and prefix for save_results call
+        full_gcs_path = f"{gcs_bucket}/{gcs_prefix}"
+
+        # Save results for each species
+        for species in species_list:
+            results_manager.save_results(
+                results_dict=results,
+                model_name=model_name,
+                species=species,
+                datatype=datatype,
+                training_size=training_size,
+                batch_size=batch_size,
+                n_folds=n_folds,
+                gcs_bucket=full_gcs_path,
+            )
 
         return results
 
