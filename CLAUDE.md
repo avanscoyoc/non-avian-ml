@@ -1,38 +1,32 @@
 # Claude Instructions: ML Audio Classification Experiment Application
 
 ## Project Goal
-Build a Kubernetes-deployable application that runs multi-factor ML experiments on audio classification models, generating ROC-AUC comparison plots across different training data sizes and species.
+Build an application that runs multi-factor ML experiments on audio classification models, generating ROC-AUC comparison plots across different training data sizes and species. All models are tuned from existing pretrained models. No models are trained from scratch. 
 
 ## Core Requirements
 
 ### Data Pipeline
-- **Input**: Pull audio data from GCS bucket `dse-staff/soundhub/data/{species_name}/` (pos/neg subfolders)
-- **Special case**: Perch model uses `dse-staff/soundhub/data_5s/{species_name}/` 
-- **Output**: Write results to GCS bucket `dse-staff/soundhub/results/`
-- **Species**: coyote, bullfrog (extensible to more)
-- **Balanced sampling**: Use equal numbers of pos/neg files for training each classifier
+- **Input**: Pull audio data from data folder `data/{species_name}/data/` (pos/neg subfolders)
+- **Special case**: Perch model uses `data/{species_name}/data_5s` 
+- **Output**: Write results to GCS bucket `results/`
+- **Species**: coyote, bullfrog (extensible to more based on config names)
+- **Balanced sampling**: Use equal numbers of pos/neg files for training each classifier, do a random draw of samples using 'random_seed' that is configurable
 - **Training size limits**: Maximum training size per species is constrained by `min(pos_samples, neg_samples)` to ensure balanced datasets
 
 ### ML Experiment Design
 - **Models**: 5 models (birdnet, perch, vgg, mobilenet, resnet)
 - **Training sizes**: 0-300 samples (configurable intervals, auto-adjusted per species based on available balanced data)
-- **Cross-validation**: K-fold with set seeds for reproducibility
+- **Cross-validation**: K-fold with set seeds for reproducibility 'kfold_seed' that is configurable
 - **Metrics**: ROC-AUC values with confidence intervals
 - **Output visualization**: Per-species charts (x=sample size, y=ROC-AUC, lines=models, error bars=CIs)
 
 ### Technical Requirements
-- **Platform**: Kubernetes-ready (Docker containerized)
-- **Cloud**: Google Cloud Platform integration
+- **Platform**: Docker containerized
 - **Code quality**: Implement linting (black, flake8, mypy), testing (pytest), proper logging
 - **Configuration**: Environment-based config (12-factor app principles)
-- **Monitoring**: Health checks, progress tracking, error handling with retries
 
 ## Architecture Suggestions
-1. **Modular design**: Separate data loading, model training, evaluation, and visualization
-2. **Async processing**: Use asyncio for concurrent model training
-3. **Resource management**: Memory-efficient data loading, model cleanup
-4. **State management**: Checkpoint intermediate results, resume capability
-5. **Scalability**: Horizontal scaling via Kubernetes jobs
+- **Modular design**: Separate data loading, model training, evaluation, results manager, and visualization
 
 ## Implementation Guidelines
 - Use modern Python practices (3.10+, type hints, dataclasses/pydantic)
@@ -42,21 +36,10 @@ Build a Kubernetes-deployable application that runs multi-factor ML experiments 
 - Follow security best practices for GCP authentication
 - Optimize for both development and production environments
 
-## Reference Code
-The existing `src/` folder contains reference implementations for:
-- Model loading and preprocessing approaches
-- GCS integration patterns
-- Configuration management
-- Evaluation metrics
-
-Feel free to redesign/refactor this codebase completely to achieve the most efficient and maintainable solution.
+Achieve the most efficient and maintainable solution, DO NOT include print statements, errors, and keep the code as simple and concises as possible and as organized as possible so that I can read it. 
 
 ## Deliverables
-1. Complete application source code with proper structure
-2. Dockerfile and Kubernetes manifests
-3. Configuration files and environment setup
-4. Documentation (README, API docs)
-5. Tests and CI/CD pipeline suggestions
-6. Performance optimization recommendations
+1. Complete application source code with proper structure in src2
+2. Documentation (README)
 
-Create a production-ready solution that follows cloud-native best practices and can scale efficiently in a Kubernetes environment.
+Create a production-ready solution that follows best practices for iterating a module with different arguments in a container and saves results. then i should be able to plot the results with the visualization module according to the Output visualisation suggestion above. 
