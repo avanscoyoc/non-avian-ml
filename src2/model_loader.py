@@ -2,116 +2,131 @@ import torch
 from torchvision import models
 import torch.nn as nn
 import numpy as np
+import librosa
+import ai_edge_litert.interpreter as tflite
 
 
 class BirdNETModel:
-    """BirdNET feature extractor for custom classifier training"""
+    """BirdNET feature extractor using the actual TFLite model.
 
-    def __init__(self, model_path):
+    - Input: 3 s audio at 48 kHz (shape [1, 144000])
+    - Embeddings: 1024-d vector from GLOBAL_AVG_POOL/Mean tensor
+    """
+
+    def __init__(self, model_path: str):
         self.model_path = model_path
-        self.feature_dim = 1024  # BirdNET embedding dimension
+        self.feature_dim = 1024
+        self.sample_rate = 48000
+        self.length_s = 3.0
+        self.interpreter = None
+        self.input_index = None
+        self.embedding_index = None
 
-        # For now, create a mock feature extractor since TF has issues
-        # This simulates BirdNET's behavior for testing/development
-        print(f"BirdNET feature extractor initialized (mock mode)")
-        print(f"Model path: {model_path}")
-        print(f"Feature dimension: {self.feature_dim}")
+        # Load TFLite model
+        self.interpreter = tflite.Interpreter(model_path=model_path)
+        self.interpreter.allocate_tensors()
 
-    def extract_embeddings(self, audio_file_path):
-        """
-        Extract BirdNET embeddings from audio file.
-        Returns consistent embeddings for the same file (for reproducibility).
-        """
-        try:
-            # For development: create deterministic embeddings based on file path
-            # This ensures consistent results across runs for the same audio file
-            import hashlib
+        # I/O details
+        self.input_details = self.interpreter.get_input_details()
+        self.output_details = self.interpreter.get_output_details()
+        self.input_index = self.input_details[0]["index"]
 
-            # Create a hash from the file path for deterministic embeddings
-            file_hash = hashlib.md5(str(audio_file_path).encode()).hexdigest()
+        # Locate the 1024-d embedding tensor (GLOBAL_AVG_POOL/Mean)
+        for td in self.interpreter.get_tensor_details():
+            name = td.get("name", "").lower()
+            shape = td.get("shape", [])
+            if "global_avg_pool/mean" in name or (len(shape) == 2 and shape[1] == 1024):
+                self.embedding_index = td["index"]
+                break
 
-            # Convert hash to seed for reproducible random embeddings
-            seed = int(file_hash[:8], 16) % (2**31 - 1)
-            np.random.seed(seed)
+    def _load_audio(self, path: str) -> np.ndarray:
+        # Load mono audio at required sample rate and pad/trim to 3 s
+        y, sr = librosa.load(path, sr=self.sample_rate, mono=True)
+        target_len = int(self.sample_rate * self.length_s)
+        if len(y) > target_len:
+            start = (len(y) - target_len) // 2
+            y = y[start : start + target_len]
+        elif len(y) < target_len:
+            y = np.pad(y, (0, target_len - len(y)), mode="constant")
+        return y.astype(np.float32)
 
-            # Generate mock embeddings that simulate BirdNET features
-            # These represent high-level acoustic features that BirdNET would extract
-            embeddings = np.random.randn(self.feature_dim).astype(np.float32)
+    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
+        # Prepare input
+        audio = self._load_audio(audio_file_path)
+        inp = np.expand_dims(audio, axis=0)
 
-            # Normalize embeddings (common practice for deep learning features)
-            embeddings = embeddings / np.linalg.norm(embeddings)
+        # Inference
+        self.interpreter.set_tensor(self.input_index, inp)
+        self.interpreter.invoke()
 
-            return torch.from_numpy(embeddings).unsqueeze(0)  # Add batch dimension
+        if self.embedding_index is not None:
+            emb = self.interpreter.get_tensor(self.embedding_index)
+            vec = emb.reshape(-1).astype(np.float32)
+        else:
+            # Fallback to logits (still from the real model)
+            logits = self.interpreter.get_tensor(self.output_details[0]["index"])
+            vec = logits[0][: self.feature_dim].astype(np.float32)
 
-        except Exception as e:
-            print(f"Error extracting embeddings from {audio_file_path}: {e}")
-            # Return zero embeddings on error
-            return torch.zeros(1, self.feature_dim)
+        # L2 normalize
+        norm = np.linalg.norm(vec) + 1e-8
+        vec = vec / norm
+        return torch.from_numpy(vec).unsqueeze(0)
 
 
 class PerchModel:
-    """Perch feature extractor for custom classifier training
+    """Perch feature extractor via Google Research 'chirp' inference.
 
-    Based on Google Research Perch model architecture:
-    - Uses 5-second audio windows (data_5s folders)
-    - EfficientNet-based embedding model
-    - Designed for bird vocalizations and bioacoustic classification
-    - Window size: 5.0 seconds at model's native sample rate
+    Uses official Perch embeddings (EfficientNet, 1280-d). Requires
+    installing from the Perch repo (google-research/perch).
     """
 
     def __init__(self):
-        # Perch model configuration based on the Google Research implementation
-        self.window_size_s = 5.0  # Perch uses 5-second windows
-        self.sample_rate = 32000  # Perch's native sample rate
-        self.feature_dim = 1280  # EfficientNet embedding dimension
+        self.window_size_s = 5.0
+        self.sample_rate = 32000
+        self.feature_dim = 1280
 
-        # For development: create a mock feature extractor
-        # In production, this would load the actual Perch model from Kaggle
-        print("Perch feature extractor initialized (mock mode)")
-        print(f"Window size: {self.window_size_s}s")
-        print(f"Sample rate: {self.sample_rate}Hz")
-        print(f"Feature dimension: {self.feature_dim}")
-        print("Model source: Kaggle Models (google/bird-vocalization-classifier)")
-        print("Uses data_5s folders for 5-second audio segments")
-
-    def extract_embeddings(self, audio_file_path):
-        """
-        Extract Perch embeddings from 5-second audio file.
-
-        In the actual implementation, this would:
-        1. Load audio file at 32kHz sample rate
-        2. Process through PCEN melspectrogram frontend
-        3. Pass through EfficientNet backbone
-        4. Return pooled embeddings
-
-        Returns consistent embeddings for the same file (for reproducibility).
-        """
         try:
-            # For development: create deterministic embeddings based on file path
-            # This simulates the actual Perch model behavior
-            import hashlib
+            from chirp.inference import embed_lib
 
-            # Create a hash from the file path for deterministic embeddings
-            file_hash = hashlib.md5(str(audio_file_path).encode()).hexdigest()
-
-            # Use different seed space than BirdNET to ensure different features
-            # Perch focuses on different acoustic features than BirdNET
-            seed = (int(file_hash[:8], 16) + 54321) % (2**31 - 1)
-            np.random.seed(seed)
-
-            # Generate mock embeddings that simulate Perch EfficientNet features
-            # These represent high-level acoustic features for 5-second segments
-            embeddings = np.random.randn(self.feature_dim).astype(np.float32)
-
-            # Normalize embeddings (standard practice for deep learning features)
-            embeddings = embeddings / np.linalg.norm(embeddings)
-
-            return torch.from_numpy(embeddings).unsqueeze(0)  # Add batch dim
-
+            # Load default Perch model from the zoo
+            # Model key may vary; see Perch README for options.
+            self._embed = embed_lib.get_embedding_model(
+                model_key="perch_8",
+                frontend="pcen_mel",
+            )
+            self._embed_model = self._embed.embed_fn
+            self._wav_to_examples = self._embed.wav_to_examples
         except Exception as e:
-            print(f"Error extracting embeddings from {audio_file_path}: {e}")
-            # Return zero embeddings on error
-            return torch.zeros(1, self.feature_dim)
+            raise RuntimeError(
+                "Perch needs 'chirp' inference. Install from GitHub "
+                "(google-research/perch) or use their Docker image. "
+                "Error: " + str(e)
+            )
+
+    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
+        import soundfile as sf
+
+        # Load 5 s audio at 32 kHz
+        y, sr = sf.read(audio_file_path, dtype="float32")
+        if sr != self.sample_rate:
+            # Use librosa for resampling if needed
+            y = librosa.resample(y, orig_sr=sr, target_sr=self.sample_rate)
+        target_len = int(self.sample_rate * self.window_size_s)
+        if len(y) > target_len:
+            start = (len(y) - target_len) // 2
+            y = y[start : start + target_len]
+        elif len(y) < target_len:
+            y = np.pad(y, (0, target_len - len(y)), mode="constant")
+
+        # Convert waveform to Perch examples and embed
+        examples = self._wav_to_examples(y, self.sample_rate)
+        # examples: [num_windows, time, freq] -> embed to [num, 1280]
+        emb = self._embed_model(examples)
+        # Pool across time windows (mean)
+        vec = np.mean(emb, axis=0).astype(np.float32)
+        # L2 normalize
+        vec = vec / (np.linalg.norm(vec) + 1e-8)
+        return torch.from_numpy(vec).unsqueeze(0)
 
 
 def load_model(model_name: str):
@@ -119,7 +134,14 @@ def load_model(model_name: str):
 
     if model_name == "resnet":
         model = models.resnet18(pretrained=True)
-        model.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        model.conv1 = nn.Conv2d(
+            1,
+            64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+        )
         model.fc = nn.Linear(model.fc.in_features, 2)
 
     elif model_name == "mobilenet":

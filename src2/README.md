@@ -240,8 +240,11 @@ def evaluate_model_extended(model, test_files, test_labels, device):
 ## Model Integration Status
 
 ### Current Status
-- **BirdNET**: Mock implementation (ready for TensorFlow Lite integration)
-- **Perch**: Mock implementation (ready for Kaggle Models integration)
+- **BirdNET**: Real TensorFlow Lite integration using ai-edge-litert. Extracts
+   the true 1024-d embedding (GLOBAL_AVG_POOL/Mean) from the official TFLite
+   model you have in the repository.
+- **Perch**: Real integration path via google-research/perch (chirp). Requires
+   installing `chirp` from the GitHub repo; see `PERCH_INTEGRATION.md`.
 - **VGG/ResNet/MobileNet**: Fully functional PyTorch implementations
 
 ### Production Integration

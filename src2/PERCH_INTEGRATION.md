@@ -1,69 +1,74 @@
 # Perch Model Integration Notes
 
 ## Current Implementation
-- **Status**: Mock implementation for development/testing
-- **Purpose**: Demonstrates the embedding extraction workflow for custom classifier training
-- **Features**: 
-  - Correct 5-second audio window handling (data_5s folders)
-  - Proper embedding dimensions (1280, matching EfficientNet)
-  - Deterministic embeddings for reproducibility
+- **Status**: Real integration via google-research/perch (chirp). Requires installing
+  the `chirp` inference package from the Perch repository.
+- **Features**:
+  - 5-second audio windows at 32 kHz (data_5s folders)
+  - Official EfficientNet Perch embeddings (1280-d) via chirp.inference
+  - L2-normalized embeddings for downstream classifiers
 
 ## Production Integration Path
 
 To integrate the actual Perch model from Google Research:
 
-### Option 1: Using Kaggle Models API
-```python
-# Install kaggle models
-# pip install kaggle-models
+### Option 1: Install chirp from GitHub (recommended)
 
-from kaggle_models import BirdVocalizationClassifier
-model = BirdVocalizationClassifier.from_pretrained()
+Add this dependency (already added in pixi.toml):
 
-# Extract embeddings
-embeddings = model.embed(audio_data)  # 5-second audio at 32kHz
+```
+chirp = @ git+https://github.com/google-research/perch.git
 ```
 
-### Option 2: Using Perch Repository Directly
-```python
-# Clone and install perch repository
-# git clone https://github.com/google-research/perch
-# pip install ./perch
+Then rebuild your environment. For pixi:
 
-from chirp.inference import embed_lib
-from chirp.inference import zoo_interface
-
-# Load Perch model
-model = zoo_interface.get_model('perch_8')
-outputs = model.embed(audio_data)
-embeddings = outputs.embeddings
+```
+pixi install
 ```
 
-### Option 3: Using TensorFlow Hub/SavedModel
-```python
-import tensorflow_hub as hub
+Verify installation:
 
-# Load Perch from TensorFlow Hub (if available)
-model = hub.load("https://tfhub.dev/google/perch/1")
-embeddings = model(audio_tensor)
 ```
+pixi run python -c "import chirp; print('chirp OK')"
+```
+
+### Option 2: Using Perch repository with Poetry
+
+Follow the official README for Poetry installation:
+
+```
+git clone https://github.com/google-research/perch
+cd perch
+poetry install
+poetry run python -m unittest discover -s chirp/inference/tests -p "*test.py"
+```
+
+### Notes on TensorFlow SavedModels
+Perch models are exported to TensorFlow; some integration paths require
+`tensorflow` availability. If TF import fails on your CPU, prefer using the
+Perch Docker or a machine with compatible CPU flags.
 
 ## Integration Requirements
-1. **Audio Format**: 5-second segments at 32kHz sample rate
-2. **Frontend**: PCEN melspectrogram preprocessing
-3. **Model**: EfficientNet-based backbone
-4. **Output**: 1280-dimensional embeddings
-5. **Normalization**: L2 normalized embeddings
+1. Audio: 5 s segments at 32 kHz
+2. Frontend: PCEN melspectrogram (handled by chirp)
+3. Model: EfficientNet backbone (Perch)
+4. Output: 1280-d embeddings
+5. Normalization: L2 normalized
 
-## Current Mock Behavior
-- Uses deterministic hash-based embeddings for consistent results
-- Different seed space than BirdNET to ensure feature diversity
-- Maintains same interface as real model for seamless swapping
-- Supports all pipeline operations (training, evaluation, K-fold CV)
+## Validation
+- Test script (after installing chirp):
 
-## Next Steps for Production
-1. Choose integration method (Kaggle, Perch repo, or TensorFlow Hub)
-2. Replace `PerchModel.__init__()` and `extract_embeddings()` methods
-3. Add error handling for model loading
-4. Test with actual audio data
-5. Validate embedding quality and classifier performance
+```
+python - << 'PY'
+from src2.model_loader import PerchModel
+m = PerchModel()
+wav = 'data/bullfrog/data_5s/neg/yourfile.wav'
+emb = m.extract_embeddings(wav)
+print('Perch embedding:', emb.shape, emb.norm().item())
+PY
+```
+
+## Next Steps
+1. Ensure chirp is installed (pixi install or Poetry route)
+2. Run a quick embedding check as above
+3. Train classifiers on the 1280-d embeddings via the existing pipeline
