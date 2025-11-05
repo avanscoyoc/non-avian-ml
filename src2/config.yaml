@@ -1,0 +1,28 @@
+log_level: INFO
+log_format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+save_plots: true
+plot_format: png
+plot_dpi: 300
+max_workers: 4
+experiments:
+- name: all_models_test
+  models:
+  - vgg
+  - resnet
+  - mobilenet
+  - birdnet
+  - perch
+  species:
+  - coyote
+  - bullfrog
+  training_sizes:
+  - 10
+  - 25
+  - 50
+  n_folds: 3
+  batch_size: 32
+  random_seed: 42
+  kfold_seed: 1
+  data_path: /workspaces/non-avian-ml/data
+  results_path: /workspaces/non-avian-ml/results
+  datatype: data

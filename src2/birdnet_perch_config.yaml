@@ -1,0 +1,32 @@
+log_level: INFO
+log_format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+save_plots: true
+plot_format: png
+plot_dpi: 300
+max_workers: 4
+experiments:
+- name: birdnet_perch_comparison
+  models:
+  - birdnet  # Uses regular data folder
+  - perch    # Uses data_5s folder
+  - vgg      # End-to-end CNN model
+  species:
+  - coyote
+  training_sizes:
+  - 10
+  - 25
+  - 50
+  - 75
+  - 100
+  n_folds: 5  # For robust evaluation
+  batch_size: 8  # Smaller batch for stability
+  random_seeds:
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+  kfold_seed: 42
+  data_path: /workspaces/non-avian-ml/data
+  results_path: /workspaces/non-avian-ml/results
+  datatype: data  # This gets overridden for perch in main.py
