@@ -7,12 +7,16 @@ from sklearn.model_selection import StratifiedKFold
 
 
 def load_audio_files(
-    data_path: str, species: str, training_size: int, datatype: str = "data", random_seed: int = None
+    data_path: str,
+    species: str,
+    training_size: int,
+    datatype: str = "data",
+    random_seed: int = None,
 ):
     # Set random seed if provided
     if random_seed is not None:
         random.seed(random_seed)
-        
+
     species_path = Path(data_path) / species / datatype
     pos_files = list((species_path / "pos").glob("*.wav"))
     neg_files = list((species_path / "neg").glob("*.wav"))

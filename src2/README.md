@@ -2,420 +2,142 @@
 
 ## Overview
 
-This application is a modular machine learning experiment framework designed for comparing audio classification models across different species and training data sizes. The system extracts embeddings from pretrained models and trains custom classifiers for species-specific binary classification tasks.
+This application is a modular machine learning experiment framework designed for comparing audio classification models across different species and training data sizes. The system supports both embedding-based models (BirdNET, Perch) and end-to-end CNN models (VGG, MobileNet, ResNet) for binary classification tasks.
 
 ## Key Features
 
-- **Multi-Model Comparison**: Tests 5 different models (BirdNET, Perch, VGG, MobileNet, ResNet)
+- **Multi-Model Comparison**: Tests embedding models (BirdNET, Perch) and CNN models (VGG, MobileNet, ResNet)
+- **Multiple Random Seeds**: Evaluates model robustness across different training data draws
 - **K-Fold Cross-Validation**: Ensures robust performance evaluation with configurable folds
-- **Embedding-Based Training**: Leverages pretrained models as feature extractors
-- **Balanced Dataset Handling**: Automatically balances positive/negative samples
+- **Embedding-Based Training**: Leverages pretrained models as feature extractors for faster training
+- **Balanced Dataset Handling**: Automatically balances positive/negative samples for each random seed
+- **Statistical Analysis**: Computes confidence intervals across random seed variations
+- **Automated Visualization**: Generates performance plots with error bars showing data sensitivity
 - **Configurable Experiments**: YAML-based configuration for flexible experimentation
 - **Reproducible Results**: Deterministic sampling and model initialization
 
 ## Architecture
 
 ```
-Audio Files → Feature Extraction → Custom Classifier Training → Performance Evaluation
-     ↓              ↓                        ↓                         ↓
-  data/*.wav    Embeddings/Features    Neural Networks          ROC-AUC Scores
+Audio Files → Model-Specific Processing → Training → Evaluation → Aggregation
+     ↓              ↓                        ↓           ↓            ↓
+  data/*.wav    BirdNET/Perch:          Custom      ROC-AUC    Mean ± Std
+               Embeddings              Classifiers   Scores    Across Seeds
+               
+               CNN Models:
+               Spectrograms
 ```
 
-## Directory Structure
+## Configuration
 
-```
-src2/
-├── README.md                    # This comprehensive guide
-├── config.py                    # Configuration management
-├── config.yaml                  # Main experiment configuration
-├── test_config.yaml            # Test/development configuration
-├── birdnet_perch_config.yaml   # BirdNET + Perch specific config
-├── data_loader.py              # Audio loading and preprocessing
-├── model_loader.py             # Model initialization and loading
-├── trainer.py                  # Training and evaluation logic
-├── main.py                     # Main experiment orchestration
-├── results.py                  # Results saving and management
-├── test_*.py                   # Test scripts for validation
-└── PERCH_INTEGRATION.md        # Perch model integration guide
-```
-
-## File-by-File Documentation
-
-### 1. `config.py` - Configuration Management
-
-**Purpose**: Handles YAML configuration loading and validation.
-
-**Key Classes**:
-- `Config`: Data class containing experiment parameters
-  - `models`: List of model names to test
-  - `species`: List of species to classify
-  - `training_sizes`: Sample sizes for training
-  - `n_folds`: Number of K-fold cross-validation folds
-  - `random_seed`: Seed for reproducible sampling
-  - `data_path`: Path to audio data directory
-  - `results_path`: Output directory for results
-
-**Key Functions**:
-- `load_config(config_path)`: Loads and parses YAML configuration
-
-**Usage**:
-```python
-from config import load_config
-config = load_config('config.yaml')
-print(f"Models: {config.models}")
-```
-
-### 2. `data_loader.py` - Audio Data Pipeline
-
-**Purpose**: Handles audio file loading, preprocessing, and K-fold split generation.
-
-**Key Functions**:
-
-#### `load_audio_files(data_path, species, training_size, datatype="data")`
-- **Purpose**: Loads balanced audio datasets for training
-- **Parameters**:
-  - `data_path`: Base path to data directory
-  - `species`: Species name (e.g., "coyote", "bullfrog")
-  - `training_size`: Number of samples per class
-  - `datatype`: "data" for regular files, "data_5s" for Perch model
-- **Returns**: Tuple of (file_paths, labels)
-- **Behavior**: 
-  - Samples equal numbers of positive/negative files
-  - Ensures balanced datasets for binary classification
-  - Shuffles data for randomization
-
-#### `preprocess_audio(file_path)`
-- **Purpose**: Converts audio to mel spectrograms for PyTorch models
-- **Process**:
-  1. Loads audio with torchaudio
-  2. Resamples to 16kHz if needed
-  3. Converts to mel spectrogram (64 mel bins)
-  4. Applies amplitude-to-dB transformation
-  5. Pads/truncates to 128 time frames
-- **Returns**: Tensor of shape (1, 64, 128)
-
-#### `create_kfold_splits(files, labels, n_folds=5, seed=1)`
-- **Purpose**: Creates stratified K-fold splits maintaining class balance
-- **Returns**: List of (train_indices, validation_indices) tuples
-
-### 3. `model_loader.py` - Model Architecture and Loading
-
-**Purpose**: Initializes and manages all model types with unified interface.
-
-#### Model Specifications
-
-##### **BirdNET Model**
-- **Type**: Embedding-based feature extractor
-- **Architecture**: TensorFlow Lite model from BirdNET team
-- **Input**: Raw audio files (any length)
-- **Embedding Dimension**: 1024
-- **Sample Rate**: 48kHz (internally handled)
-- **Window Size**: 3 seconds
-- **Data Source**: Regular `data/` folders
-- **Use Case**: Bird vocalization analysis and transfer learning
-
-```python
-# BirdNET Usage
-birdnet = BirdNETModel(model_path)
-embeddings = birdnet.extract_embeddings(audio_file_path)  # Shape: (1, 1024)
-```
-
-##### **Perch Model**
-- **Type**: Embedding-based feature extractor
-- **Architecture**: EfficientNet backbone with PCEN frontend
-- **Input**: 5-second audio segments
-- **Embedding Dimension**: 1280
-- **Sample Rate**: 32kHz
-- **Window Size**: 5.0 seconds
-- **Data Source**: `data_5s/` folders (5-second clips)
-- **Use Case**: Bioacoustic classification and transfer learning
-- **Model Source**: Google Research Perch (Kaggle Models)
-
-```python
-# Perch Usage
-perch = PerchModel()
-embeddings = perch.extract_embeddings(audio_file_path)  # Shape: (1, 1280)
-```
-
-##### **VGG Model**
-- **Type**: End-to-end convolutional neural network
-- **Architecture**: VGG-11 with modifications for audio
-- **Input**: Mel spectrograms (1, 64, 128)
-- **Modifications**:
-  - First conv layer: 1 input channel (mono audio)
-  - Final layer: 2 classes (binary classification)
-- **Training**: Full end-to-end backpropagation
-
-##### **ResNet Model**
-- **Type**: End-to-end residual neural network
-- **Architecture**: ResNet-18 adapted for audio
-- **Input**: Mel spectrograms (1, 64, 128)
-- **Modifications**:
-  - First conv layer: 1 input channel
-  - Final layer: 2 classes
-- **Training**: Full end-to-end backpropagation
-
-##### **MobileNet Model**
-- **Type**: End-to-end efficient convolutional network
-- **Architecture**: MobileNet-V2 for mobile/edge deployment
-- **Input**: Mel spectrograms (1, 64, 128)
-- **Modifications**:
-  - First conv layer: 1 input channel
-  - Final layer: 2 classes
-- **Training**: Full end-to-end backpropagation
-
-#### `load_model(model_name)`
-- **Purpose**: Factory function for model instantiation
-- **Returns**: Tuple of (model, device)
-- **Supported Models**: "birdnet", "perch", "vgg", "resnet", "mobilenet"
-
-### 4. `trainer.py` - Training and Evaluation Engine
-
-**Purpose**: Handles model training and performance evaluation with different training strategies.
-
-#### Training Strategies
-
-##### **Embedding-Based Training** (BirdNET, Perch)
-1. **Feature Extraction**: Extract embeddings from pretrained models
-2. **Classifier Architecture**:
-   ```
-   Input (1024/1280) → Linear(256) → ReLU → Dropout(0.3) 
-   → Linear(64) → ReLU → Dropout(0.3) → Linear(2)
-   ```
-3. **Training**: 20 epochs with Adam optimizer (lr=0.001)
-4. **Benefits**: Fast training, leverages pretrained knowledge
-
-##### **End-to-End Training** (VGG, ResNet, MobileNet)
-1. **Direct Training**: Train entire network on mel spectrograms
-2. **Training**: 5 epochs with Adam optimizer (lr=0.001)
-3. **Benefits**: Task-specific feature learning
-
-#### Key Functions
-
-##### `train_model(model, train_files, train_labels, device, is_embedding_model=False)`
-- **Purpose**: Trains models using appropriate strategy
-- **Process**:
-  - Embedding models: Extract features → Train classifier
-  - End-to-end models: Train full network on spectrograms
-- **Returns**: Trained model/classifier
-
-##### `evaluate_model(model, test_files, test_labels, device, original_embedding_model=None)`
-- **Purpose**: Evaluates model performance
-- **Metric**: ROC-AUC score
-- **Process**:
-  - Generates predictions on test set
-  - Computes area under ROC curve
-- **Returns**: AUC score (float)
-
-### 5. `main.py` - Experiment Orchestration
-
-**Purpose**: Main execution script that orchestrates complete experiments.
-
-#### Experiment Flow
-1. **Configuration Loading**: Parse YAML configuration
-2. **Species Iteration**: Loop through each species
-3. **Model Iteration**: Test each model type
-4. **Training Size Iteration**: Vary training data amounts
-5. **K-Fold Cross-Validation**: Multiple train/test splits
-6. **Result Aggregation**: Collect and save performance metrics
-
-#### Key Functions
-
-##### `main()`
-- **Purpose**: Complete experiment execution
-- **Process**:
-  ```python
-  for species in config.species:
-      for model_name in config.models:
-          for training_size in config.training_sizes:
-              # Load balanced dataset
-              files, labels = load_audio_files(...)
-              
-              # K-fold cross-validation
-              for fold, (train_idx, val_idx) in enumerate(splits):
-                  # Train model
-                  trained_model = train_model(...)
-                  
-                  # Evaluate performance
-                  auc_score = evaluate_model(...)
-                  
-              # Save results
-              save_results(results, output_file)
-  ```
-
-**Usage**:
-```bash
-cd src2
-python main.py  # Uses config.yaml by default
-```
-
-### 6. `results.py` - Results Management
-
-**Purpose**: Handles saving and formatting of experiment results.
-
-#### `save_results(results, output_path)`
-- **Purpose**: Saves experiment results to CSV format
-- **Output Format**:
-  ```csv
-  species,model,training_size,mean_auc,fold_scores
-  coyote,birdnet,10,0.8234,"[0.8012, 0.8234, 0.8456]"
-  coyote,perch,10,0.7891,"[0.7654, 0.7891, 0.8128]"
-  ```
-
-## Configuration Guide
-
-### Main Configuration (`config.yaml`)
+The system uses a YAML configuration file (`config.yaml`) with the following structure:
 
 ```yaml
-# Logging and output settings
 log_level: INFO
 log_format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 save_plots: true
 plot_format: png
 plot_dpi: 300
 max_workers: 4
-
 experiments:
-- name: full_experiment
-  models:
-  - vgg          # End-to-end CNN
-  - resnet       # End-to-end ResNet
-  - mobilenet    # End-to-end MobileNet
-  - birdnet      # Embedding-based (uses data/)
-  - perch        # Embedding-based (uses data_5s/)
-  
-  species:
-  - coyote       # Available species
-  - bullfrog
-  # Add more species as needed
-  
-  training_sizes:
-  - 10           # Small dataset
-  - 25           # Medium dataset
-  - 50           # Large dataset
-  
-  n_folds: 3           # K-fold cross-validation
-  batch_size: 32       # Training batch size
-  random_seed: 42      # Reproducibility
-  kfold_seed: 1        # K-fold reproducibility
-  
-  # Paths
+- name: all_models_test
+  models: [birdnet, perch]  # Available: birdnet, perch, vgg, mobilenet, resnet
+  species: [coyote, bullfrog]
+  training_sizes: [10, 25]  # Number of samples per class
+  n_folds: 3               # K-fold cross-validation folds
+  batch_size: 32
+  random_seeds: [1,2,3,4,5]  # Multiple data draws for robustness
+  kfold_seed: 1            # Consistent K-fold splits across seeds
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
-  datatype: data       # Overridden for perch model
+  datatype: data          # "data" or "data_5s" (auto-selected for Perch)
 ```
 
-### Data Directory Structure
+### Key Configuration Parameters
 
-```
-data/
-├── coyote/
-│   ├── data/           # Regular audio files (for most models)
-│   │   ├── pos/        # Positive samples (coyote vocalizations)
-│   │   │   ├── file1.wav
-│   │   │   └── file2.wav
-│   │   └── neg/        # Negative samples (non-coyote sounds)
-│   │       ├── file3.wav
-│   │       └── file4.wav
-│   └── data_5s/        # 5-second clips (for Perch model)
-│       ├── pos/
-│       └── neg/
-├── bullfrog/
-│   ├── data/
-│   └── data_5s/
-└── [other_species]/
-    ├── data/
-    └── data_5s/
-```
+- **`random_seeds`**: List of seeds for different training data draws. Each seed creates a different random sample of training data, allowing measurement of model robustness to data selection.
+- **`kfold_seed`**: Fixed seed for K-fold splitting to ensure consistent evaluation across random seeds.
+- **`models`**: 
+  - `birdnet`: Uses TensorFlow Lite model for 1024-dim embeddings
+  - `perch`: Uses EfficientNet-based model for 1280-dim embeddings (uses data_5s)
+  - `vgg`, `mobilenet`, `resnet`: End-to-end CNN training on spectrograms
+- **`training_sizes`**: Number of positive and negative samples per training set
+- **`datatype`**: Automatically set to "data_5s" for Perch model, "data" for others
 
-## Usage Guide
+## Usage
 
 ### Quick Start
 
-1. **Set up environment**:
-   ```bash
-   cd /workspaces/non-avian-ml/src2
-   ```
-
-2. **Configure experiment** (edit `config.yaml`):
-   ```yaml
-   models: [birdnet, perch]  # Start with embedding models
-   species: [coyote]         # Single species test
-   training_sizes: [10]      # Small dataset
-   n_folds: 2               # Quick validation
-   ```
-
-3. **Run experiment**:
-   ```bash
-   python main.py
-   ```
-
-4. **Check results**:
-   ```bash
-   ls ../results/  # Look for CSV files
-   ```
-
-### Advanced Usage
-
-#### Custom Configuration
-
-Create a new configuration file:
-```yaml
-# my_experiment.yaml
-experiments:
-- name: my_custom_experiment
-  models: [birdnet, vgg]
-  species: [bullfrog]
-  training_sizes: [5, 15, 30]
-  n_folds: 5
-  # ... other settings
+1. **Run the main experiment:**
+```bash
+cd /workspaces/non-avian-ml
+pixi run python src2/main.py
 ```
 
-Use custom configuration:
-```python
-from config import load_config
-config = load_config('my_experiment.yaml')
-# Then run main() with this config
+2. **View results:**
+   - CSV: `/workspaces/non-avian-ml/results/experiment_results.csv`
+   - Plot: `/workspaces/non-avian-ml/results/experiment_results_plot_species_models.png`
+
+### Running Specific Configurations
+
+```bash
+# Use a different config file
+pixi run python src2/main.py --config test_config.yaml
+
+# Run from project root (auto-detects src2/config.yaml)
+cd /workspaces/non-avian-ml
+pixi run python src2/main.py
 ```
 
-#### Testing Individual Components
+### Understanding Results
 
-Test data loading:
-```python
-from data_loader import load_audio_files
-files, labels = load_audio_files("/path/to/data", "coyote", 10)
-print(f"Loaded {len(files)} files with {len(labels)} labels")
+The system outputs:
+
+1. **Aggregated CSV** with columns:
+   - `model`: Model name (birdnet, perch, etc.)
+   - `species`: Species name (coyote, bullfrog, etc.)
+   - `training_size`: Number of samples per class
+   - `mean_auc`: Average ROC-AUC across random seeds
+   - `std_auc`: Standard deviation showing data sensitivity
+
+2. **Visualization Plot** showing:
+   - X-axis: Training size
+   - Y-axis: ROC-AUC performance
+   - Error bars: ±1 standard deviation across random seeds
+   - Separate subplots for each species
+   - Different lines for each model
+
+### Statistical Interpretation
+
+- **Mean AUC**: Average performance across different training data samples
+- **Standard Deviation**: Indicates model robustness to training data selection
+  - Low std_auc = Model is robust to different training samples
+  - High std_auc = Model performance varies significantly with data selection
+- **Error Bars**: Show confidence intervals for expected performance range
+
+## Data Structure
+
+Expected data organization:
+```
+data/
+├── species_name/
+│   ├── data/           # For BirdNET, VGG, MobileNet, ResNet
+│   │   ├── pos/        # Positive samples
+│   │   └── neg/        # Negative samples
+│   └── data_5s/        # For Perch model (5-second segments)
+│       ├── pos/
+│       └── neg/
 ```
 
-Test model loading:
-```python
-from model_loader import load_model
-birdnet, device = load_model("birdnet")
-print(f"Model loaded on {device}")
-```
+## Models
 
-Test embedding extraction:
-```python
-embeddings = birdnet.extract_embeddings("path/to/audio.wav")
-print(f"Embedding shape: {embeddings.shape}")
-```
+- **BirdNET**: TensorFlow Lite, 1024-dim embeddings, 3s windows
+- **Perch**: EfficientNet-based, 1280-dim embeddings, 5s windows
+- **VGG/MobileNet/ResNet**: End-to-end CNN training on spectrograms
 
-## Performance Expectations
+## Development
 
-### Training Times (Approximate)
-- **BirdNET**: ~30 seconds per fold (embedding extraction + classifier training)
-- **Perch**: ~30 seconds per fold (embedding extraction + classifier training)
-- **VGG/ResNet/MobileNet**: ~2-5 minutes per fold (end-to-end training)
 
-### Memory Requirements
-- **Embedding Models**: Low GPU memory (~1-2GB)
-- **End-to-End Models**: Higher GPU memory (~4-8GB)
-- **Large Datasets**: More RAM for audio loading
-
-### Expected Performance
-- **BirdNET/Perch**: Often achieve AUC > 0.8 due to pretrained features
-- **End-to-End Models**: Performance varies based on training data size
-- **Small Datasets**: Embedding models typically outperform end-to-end models
 
 ## Troubleshooting
 
