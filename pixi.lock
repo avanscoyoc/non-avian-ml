@@ -192,6 +192,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/57/8d/30aa32745af16af0a9a650115fbe81bde7c610ed5c21b381fca0196f3a7f/audioread-3.0.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b7/b8/3fe70c75fe32afc4bb507f75563d39bc5642255d1d94f1f23604725780bf/babel-2.17.0-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/1e/cb/ce0f35ccac8c9e730ecdb8da07ce9471219efe4e28e3db33f549a7df3ab7/birdnetlib-0.18.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/0c/27/565de82da834a52bfcb9c9e315ea2f90e6e6279dfd613b959ae7dfb3d18f/birdsong_recognition_dataset-0.3.2.post1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/72/76/20fa66124dbe6be5cafeb312ece67de6b61dd91a0247d1ea13db4ebb33c2/cachetools-5.5.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/93/62/5e89cdfe04584cb7f4d36003ffa2936681b03ecc0754f8e969c2becb7e24/charset_normalizer-3.4.1-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -288,6 +289,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/d4/f0/6d5c100f6b18d973e86646aa5fc09bc12ee88a28684a56fd95511bceee68/protobuf-4.25.6-cp37-abi3-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/c8/f1/d6a797abb14f6283c0ddff96bbdd46937f64122b8c925cab503dd37f8214/pyasn1-0.6.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/77/89/bc88a6711935ba795a679ea6ebee07e128050d6382eaa35a0a47c8032bdc/pyasn1_modules-0.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/a6/53/d78dc063216e62fc55f6b2eebb447f6a4b0a59f55c8406376f76bf959b08/pydub-0.25.1-py2.py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1c/a7/c8a2d361bf89c0d9577c934ebb7421b25dc84bf3a8e3ac0a40aed9acc547/pyparsing-3.2.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/02/df/0c7e4582b74264fe2179e78fcdeb9313f680d40ffe1dd4b078da5a2cbf82/pytorch_lightning-2.5.0.post0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/eb/38/ac33370d784287baa1c3d538978b5e2ea064d4c1b93ffbd12826c190dd10/pytz-2025.1-py2.py3-none-any.whl
@@ -332,6 +334,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/a9/99/3ae339466c9183ea5b8ae87b34c0b897eda475d2aec2307cae60e5cd4f29/uritemplate-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/c8/19/4ec628951a74043532ca2cf5d97b7b14863931476d117c471e8e2b1eb39f/urllib3-2.3.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/7d/53/361846bf44dcf3bc5a4be0e0cb662b42c7e6996d71c903c936e191657e0d/wandb-0.19.7-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+      - pypi: https://files.pythonhosted.org/packages/ff/e0/dad09238e32d161e332c2e94b367d2aaa5f2ffe3e240b49b70473979fd61/watchdog-2.1.9-py3-none-manylinux2014_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/52/24/ab44c871b0f07f491e5d2ad12c9bd7358e527510618cb1b803a88e986db1/werkzeug-3.1.3-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/21/02/88b65cc394961a60c43c70517066b6b679738caf78506a5da7b88ffcb643/widgetsnbextension-4.0.13-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/fd/70/8a133c88a394394dd57159083b86a564247399440b63f2da0ad727593570/wrapt-1.14.1-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
@@ -563,6 +566,16 @@ packages:
   - pkg:pypi/beautifulsoup4?source=compressed-mapping
   size: 145482
   timestamp: 1738740460562
+- pypi: https://files.pythonhosted.org/packages/1e/cb/ce0f35ccac8c9e730ecdb8da07ce9471219efe4e28e3db33f549a7df3ab7/birdnetlib-0.18.0-py3-none-any.whl
+  name: birdnetlib
+  version: 0.18.0
+  sha256: 38d1f3d2a7f28069d0413710187b2656de9e8afd7c163de5e6d1d20135865f2c
+  requires_dist:
+  - matplotlib>=3.5.3
+  - pydub==0.25.1
+  - requests>=2.28.1
+  - watchdog==2.1.9
+  requires_python: '>=3.9'
 - pypi: https://files.pythonhosted.org/packages/0c/27/565de82da834a52bfcb9c9e315ea2f90e6e6279dfd613b959ae7dfb3d18f/birdsong_recognition_dataset-0.3.2.post1-py3-none-any.whl
   name: birdsong-recognition-dataset
   version: 0.3.2.post1
@@ -3579,6 +3592,10 @@ packages:
   - pkg:pypi/pydantic-core?source=hash-mapping
   size: 1636318
   timestamp: 1734571799517
+- pypi: https://files.pythonhosted.org/packages/a6/53/d78dc063216e62fc55f6b2eebb447f6a4b0a59f55c8406376f76bf959b08/pydub-0.25.1-py2.py3-none-any.whl
+  name: pydub
+  version: 0.25.1
+  sha256: 65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6
 - conda: https://conda.anaconda.org/conda-forge/noarch/pygments-2.19.1-pyhd8ed1ab_0.conda
   sha256: 28a3e3161390a9d23bc02b4419448f8d27679d9e2c250e29849e37749c8de86b
   md5: 232fb4577b6687b2d503ef8e254270c9
@@ -5111,6 +5128,13 @@ packages:
   - sweeps>=0.2.0 ; extra == 'sweeps'
   - wandb-workspaces ; extra == 'workspaces'
   requires_python: '>=3.8'
+- pypi: https://files.pythonhosted.org/packages/ff/e0/dad09238e32d161e332c2e94b367d2aaa5f2ffe3e240b49b70473979fd61/watchdog-2.1.9-py3-none-manylinux2014_x86_64.whl
+  name: watchdog
+  version: 2.1.9
+  sha256: 4f4e1c4aa54fb86316a62a87b3378c025e228178d55481d30d857c6c438897d6
+  requires_dist:
+  - pyyaml>=3.10 ; extra == 'watchmedo'
+  requires_python: '>=3.6'
 - conda: https://conda.anaconda.org/conda-forge/linux-64/watchfiles-1.0.5-py310h505e2c1_0.conda
   sha256: 2e9ae8a040883a37ff1da9ca09e607768295468fdd0b7e1f535aa8bd98c67c06
   md5: e82bd62c5b21f2c32a0bba0094d38470
