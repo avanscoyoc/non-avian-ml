@@ -7,9 +7,6 @@ max_workers: 4
 experiments:
 - name: all_models_test
   models:
-  - vgg
-  - resnet
-  - mobilenet
   - birdnet
   - perch
   species:
@@ -18,10 +15,9 @@ experiments:
   training_sizes:
   - 10
   - 25
-  - 50
   n_folds: 3
   batch_size: 32
-  random_seed: 42
+  random_seeds: [1,2,3,4,5]
   kfold_seed: 1
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
