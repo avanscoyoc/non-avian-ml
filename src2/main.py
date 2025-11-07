@@ -1,10 +1,11 @@
-import random
 import os
 from pathlib import Path
-import matplotlib.pyplot as plt
-import numpy as np
 from config import load_config
-from data_loader import load_audio_files, create_kfold_splits
+from data_loader import (
+    load_audio_files,
+    create_kfold_splits,
+    create_train_test_split,
+)
 from model_loader import load_model
 from trainer import train_model, evaluate_model
 from results import save_results, plot_species_models
@@ -12,7 +13,7 @@ from results import save_results, plot_species_models
 
 def main():
     try:
-        # Determine config path - look in src2 directory if running from project root
+        # Load config
         config_path = "config.yaml"
         if not os.path.exists(config_path):
             src2_config = Path(__file__).parent / "config.yaml"
@@ -23,88 +24,94 @@ def main():
         all_results = []
 
         for species in config.species:
+            print(f"\n{'=' * 80}\nSpecies: {species}\n{'=' * 80}")
+
             for model_name in config.models:
+                # Determine datatype based on model
+                datatype = "data_5s" if model_name == "perch" else config.datatype
+
+                # Create fixed train/test split ONCE per species/model combo
+                train_pos, train_neg, test_pos, test_neg = create_train_test_split(
+                    config.data_path,
+                    species,
+                    datatype,
+                    config.test_size_per_class,
+                    config.kfold_seed,
+                )
+
+                test_files = test_pos + test_neg
+                test_labels = [1] * len(test_pos) + [0] * len(test_neg)
+
+                print(
+                    f"\nModel: {model_name} | Test set: {len(test_files)} "
+                    f"({len(test_pos)}+{len(test_neg)} fixed)"
+                )
+
                 for training_size in config.training_sizes:
-                    print(
-                        f"Running {model_name} on {species} with training_size={training_size}"
-                    )
+                    print(f"  Training size: {training_size}")
 
                     for random_seed in config.random_seeds:
-                        print(f"  Random seed: {random_seed}")
-
-                        # Load data with this random seed
-                        datatype = "data_5s" if model_name == "perch" else "data"
+                        # Sample from train pool
                         files, labels = load_audio_files(
-                            config.data_path,
-                            species,
-                            training_size,
-                            datatype,
-                            random_seed=random_seed,
+                            training_size, train_pos, train_neg, random_seed
                         )
-                        print(f"  Loaded {len(files)} files")
 
-                        # K-fold CV
-                        splits = create_kfold_splits(
-                            files, labels, config.n_folds, seed=config.kfold_seed
-                        )
+                        # K-fold CV within training samples
                         fold_scores = []
-
-                        for fold, (train_idx, val_idx) in enumerate(splits):
-                            print(f"    Fold {fold + 1}/{config.n_folds}")
-
-                            train_files = [files[i] for i in train_idx]
-                            train_labels = [labels[i] for i in train_idx]
-                            val_files = [files[i] for i in val_idx]
-                            val_labels = [labels[i] for i in val_idx]
-
-                            # Load and train model
-                            original_model, device = load_model(model_name)
-                            is_embedding = model_name in ["birdnet", "perch"]
-
+                        for fold_idx, (
+                            train_files,
+                            train_labels,
+                            val_files,
+                            val_labels,
+                        ) in enumerate(
+                            create_kfold_splits(
+                                files, labels, config.n_folds, config.kfold_seed
+                            ),
+                            1,
+                        ):
+                            # Train model
+                            model, device = load_model(model_name)
                             trained_model = train_model(
-                                original_model,
-                                train_files,
-                                train_labels,
-                                device,
-                                is_embedding,
+                                model, train_files, train_labels, device
                             )
 
-                            # Evaluate
-                            if is_embedding:
-                                score = evaluate_model(
-                                    trained_model,
-                                    val_files,
-                                    val_labels,
-                                    device,
-                                    original_model,
-                                )
-                            else:
-                                score = evaluate_model(
-                                    trained_model, val_files, val_labels, device
-                                )
-                            fold_scores.append(score)
-                            print(f"      Fold {fold + 1} score: {score:.4f}")
+                            # Validate on fold
+                            val_score = evaluate_model(
+                                trained_model, val_files, val_labels, device, model
+                            )
+                            fold_scores.append(val_score)
 
-                        # Save results for this random seed
-                        mean_score = sum(fold_scores) / len(fold_scores)
-                        result = {
-                            "species": species,
-                            "model": model_name,
-                            "training_size": training_size,
-                            "random_seed": random_seed,
-                            "mean_auc": mean_score,
-                            "fold_scores": fold_scores,
-                        }
-                        all_results.append(result)
-                        print(f"    Mean AUC: {mean_score:.4f}")
+                        # Evaluate on FIXED test set
+                        final_model, device = load_model(model_name)
+                        final_trained = train_model(final_model, files, labels, device)
+                        test_score = evaluate_model(
+                            final_trained, test_files, test_labels, device, final_model
+                        )
 
-        # Save all results
+                        # Store results
+                        cv_mean = sum(fold_scores) / len(fold_scores)
+                        all_results.append(
+                            {
+                                "species": species,
+                                "model": model_name,
+                                "training_size": training_size,
+                                "random_seed": random_seed,
+                                "cv_auc_mean": cv_mean,
+                                "test_auc": test_score,
+                            }
+                        )
+                        print(
+                            f"    Seed {random_seed}: CV={cv_mean:.4f}, "
+                            f"Test={test_score:.4f}"
+                        )
+
+        # Save results
         output_file = f"{config.results_path}/experiment_results.csv"
         df = save_results(all_results, output_file)
-        print(f"Results saved to {output_file}")
+        print(f"\nResults saved to {output_file}")
 
-        # Create plot
-        plot_file = output_file.replace(".csv", "_plot_species_models.png")
+        # Plot
+        plot_file = output_file.replace(".csv", "_plot.png")
         plot_species_models(df, plot_file)
         print(f"Plot saved to {plot_file}")
 

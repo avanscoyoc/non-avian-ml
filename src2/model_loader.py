@@ -7,20 +7,22 @@ import ai_edge_litert.interpreter as tflite
 
 
 class BirdNETModel:
-    """BirdNET feature extractor using the actual TFLite model.
+    """BirdNET feature extractor using logits as embeddings.
 
     - Input: 3 s audio at 48 kHz (shape [1, 144000])
-    - Embeddings: 1024-d vector from GLOBAL_AVG_POOL/Mean tensor
+    - Embeddings: 6522-d logit vector (before softmax)
+
+    Note: We use logits instead of intermediate pooling layers because
+    TFLite doesn't retain intermediate tensors by default.
     """
 
     def __init__(self, model_path: str):
         self.model_path = model_path
-        self.feature_dim = 1024
         self.sample_rate = 48000
         self.length_s = 3.0
         self.interpreter = None
         self.input_index = None
-        self.embedding_index = None
+        self.output_index = None
 
         # Load TFLite model
         self.interpreter = tflite.Interpreter(model_path=model_path)
@@ -30,14 +32,10 @@ class BirdNETModel:
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
         self.input_index = self.input_details[0]["index"]
+        self.output_index = self.output_details[0]["index"]
 
-        # Locate the 1024-d embedding tensor (GLOBAL_AVG_POOL/Mean)
-        for td in self.interpreter.get_tensor_details():
-            name = td.get("name", "").lower()
-            shape = td.get("shape", [])
-            if "global_avg_pool/mean" in name or (len(shape) == 2 and shape[1] == 1024):
-                self.embedding_index = td["index"]
-                break
+        # Feature dimension is the logit size
+        self.feature_dim = self.output_details[0]["shape"][1]
 
     def _load_audio(self, path: str) -> np.ndarray:
         # Load mono audio at required sample rate and pad/trim to 3 s
@@ -59,13 +57,9 @@ class BirdNETModel:
         self.interpreter.set_tensor(self.input_index, inp)
         self.interpreter.invoke()
 
-        if self.embedding_index is not None:
-            emb = self.interpreter.get_tensor(self.embedding_index)
-            vec = emb.reshape(-1).astype(np.float32)
-        else:
-            # Fallback to logits (still from the real model)
-            logits = self.interpreter.get_tensor(self.output_details[0]["index"])
-            vec = logits[0][: self.feature_dim].astype(np.float32)
+        # Get logits (output before softmax)
+        logits = self.interpreter.get_tensor(self.output_index)
+        vec = logits[0].astype(np.float32)
 
         # L2 normalize
         norm = np.linalg.norm(vec) + 1e-8
@@ -129,32 +123,103 @@ class PerchModel:
         return torch.from_numpy(vec).unsqueeze(0)
 
 
+class CNNEmbeddingModel(nn.Module):
+    """Wrapper for torchvision CNNs that extracts frozen pretrained embeddings.
+
+    Matches BirdNET/Perch workflow: freeze backbone, train only a new classifier head.
+    """
+
+    def __init__(self, backbone_name: str):
+        super().__init__()
+        self.backbone_name = backbone_name
+
+        if backbone_name == "resnet":
+            base_model = models.resnet18(pretrained=True)
+            # Adapt first conv for single-channel mel-spectrograms
+            base_model.conv1 = nn.Conv2d(
+                1, 64, kernel_size=7, stride=2, padding=3, bias=False
+            )
+            # Remove final FC layer to extract embeddings
+            self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])
+            self.feature_dim = 512
+
+        elif backbone_name == "mobilenet":
+            base_model = models.mobilenet_v2(pretrained=True)
+            # Adapt first conv
+            base_model.features[0][0] = nn.Conv2d(
+                1, 32, kernel_size=3, stride=2, padding=1, bias=False
+            )
+            # Remove classifier to extract embeddings
+            self.feature_extractor = base_model.features
+            self.feature_dim = 1280
+            self.pool = nn.AdaptiveAvgPool2d(1)
+
+        elif backbone_name == "vgg":
+            base_model = models.vgg11(pretrained=True)
+            # Adapt first conv
+            base_model.features[0] = nn.Conv2d(1, 64, kernel_size=3, padding=1)
+            # Remove classifier to extract embeddings
+            self.feature_extractor = base_model.features
+            self.feature_dim = 512
+            self.pool = nn.AdaptiveAvgPool2d((7, 7))
+            self.flatten_fc = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(512 * 7 * 7, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(0.5),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+            )
+
+        else:
+            raise ValueError(f"Unknown backbone: {backbone_name}")
+
+        # Freeze all pretrained weights
+        for param in self.parameters():
+            param.requires_grad = False
+
+    def forward(self, x):
+        """Extract frozen embeddings from mel-spectrogram input."""
+        x = self.feature_extractor(x)
+
+        if self.backbone_name == "mobilenet":
+            x = self.pool(x)
+            x = torch.flatten(x, 1)
+        elif self.backbone_name == "vgg":
+            x = self.pool(x)
+            x = self.flatten_fc(x)
+        else:  # resnet
+            x = torch.flatten(x, 1)
+
+        # L2 normalize
+        x = x / (torch.norm(x, dim=1, keepdim=True) + 1e-8)
+        return x
+
+    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
+        """Extract embeddings from audio file (for consistency with BirdNET/Perch API)."""
+        from data_loader import preprocess_audio
+
+        # Preprocess audio to mel-spectrogram
+        mel_spec = preprocess_audio(audio_file_path)
+
+        # Add batch dimension if needed
+        if mel_spec.dim() == 3:
+            mel_spec = mel_spec.unsqueeze(0)
+
+        # Extract embeddings
+        with torch.no_grad():
+            embeddings = self.forward(mel_spec)
+
+        return embeddings
+
+
 def load_model(model_name: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if model_name == "resnet":
-        model = models.resnet18(pretrained=True)
-        model.conv1 = nn.Conv2d(
-            1,
-            64,
-            kernel_size=7,
-            stride=2,
-            padding=3,
-            bias=False,
-        )
-        model.fc = nn.Linear(model.fc.in_features, 2)
-
-    elif model_name == "mobilenet":
-        model = models.mobilenet_v2(pretrained=True)
-        model.features[0][0] = nn.Conv2d(
-            1, 32, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        model.classifier[1] = nn.Linear(model.classifier[1].in_features, 2)
-
-    elif model_name == "vgg":
-        model = models.vgg11(pretrained=True)
-        model.features[0] = nn.Conv2d(1, 64, kernel_size=3, padding=1)
-        model.classifier[6] = nn.Linear(4096, 2)
+    if model_name in ["resnet", "mobilenet", "vgg"]:
+        # Return frozen embedding extractor
+        model = CNNEmbeddingModel(model_name)
+        return model.to(device), device
 
     elif model_name == "birdnet":
         # Return wrapped model for now
@@ -167,5 +232,3 @@ def load_model(model_name: str):
 
     else:
         raise ValueError(f"Unknown model: {model_name}")
-
-    return model.to(device), device
