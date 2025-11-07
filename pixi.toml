@@ -7,6 +7,7 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
+install-chirp = "pip install git+https://github.com/google-research/perch.git"
 
 [dependencies]
 python = "3.10.*"
@@ -38,6 +39,5 @@ google-cloud-storage = "*"
 google-cloud-run = "*"
 google-api-python-client = "*"  
 birdnetlib = "*"
-chirp-inference = "*"
 librosa = "*"
 soundfile = "*"

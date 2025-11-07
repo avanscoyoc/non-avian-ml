@@ -4,9 +4,11 @@ from pathlib import Path
 
 
 def plot_species_models(df, output_path):
+    """Plot learning curves showing test set performance."""
     species_list = df["species"].unique()
-    fig, axes = plt.subplots(1, len(species_list), figsize=(6 * len(species_list), 6))
-    if len(species_list) == 1:
+    n_species = len(species_list)
+    fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 6))
+    if n_species == 1:
         axes = [axes]
 
     for i, species in enumerate(species_list):
@@ -18,8 +20,8 @@ def plot_species_models(df, output_path):
 
             axes[i].errorbar(
                 model_data["training_size"],
-                model_data["mean_auc"],
-                yerr=model_data["std_auc"],
+                model_data["test_auc_mean"],
+                yerr=model_data["test_auc_std"],
                 label=model.upper(),
                 marker="o",
                 capsize=5,
@@ -27,7 +29,7 @@ def plot_species_models(df, output_path):
 
         axes[i].set_title(f"{species.replace('_', ' ').title()}")
         axes[i].set_xlabel("Training Size")
-        axes[i].set_ylabel("ROC-AUC")
+        axes[i].set_ylabel("Test ROC-AUC")
         axes[i].legend()
         axes[i].grid(True, alpha=0.3)
         axes[i].set_ylim(0, 1)
@@ -38,37 +40,31 @@ def plot_species_models(df, output_path):
 
 
 def save_results(results, output_path):
+    """Aggregate results across random seeds and save."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    import numpy as np
 
     df = pd.DataFrame(results)
 
-    # Calculate mean_auc from fold_scores if not present
-    if "mean_auc" not in df.columns and "fold_scores" in df.columns:
-        df["mean_auc"] = df["fold_scores"].apply(
-            lambda x: np.mean(x) if isinstance(x, list) else x
+    # Aggregate across random seeds
+    agg_results = (
+        df.groupby(["model", "species", "training_size"])
+        .agg(
+            {
+                "cv_auc_mean": ["mean", "std"],
+                "test_auc": ["mean", "std"],
+            }
         )
+        .round(4)
+    )
 
-    # If we have multiple random_seeds, aggregate across them
-    if "random_seed" in df.columns:
-        agg_results = (
-            df.groupby(["model", "species", "training_size"])
-            .agg({"mean_auc": ["mean", "std"]})
-            .round(4)
-        )
+    # Flatten column names
+    agg_results.columns = [
+        "cv_auc_mean",
+        "cv_auc_std",
+        "test_auc_mean",
+        "test_auc_std",
+    ]
+    agg_results = agg_results.reset_index()
+    agg_results.to_csv(output_path, index=False)
 
-        # Flatten column names
-        agg_results.columns = ["mean_auc", "std_auc"]
-        agg_results = agg_results.reset_index()
-        agg_results.to_csv(output_path, index=False)
-        return agg_results
-    else:
-        # Calculate std_auc from fold_scores if not present
-        if "std_auc" not in df.columns and "fold_scores" in df.columns:
-            df["std_auc"] = df["fold_scores"].apply(
-                lambda x: np.std(x) if isinstance(x, list) else 0
-            )
-
-        df.to_csv(output_path, index=False)
-        return df
-    return df
+    return agg_results

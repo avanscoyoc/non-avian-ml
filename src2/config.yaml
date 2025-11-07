@@ -8,16 +8,18 @@ experiments:
 - name: all_models_test
   models:
   - birdnet
-  - perch
+  - mobilenet
+  - resnet
+  - vgg
   species:
   - coyote
-  - bullfrog
   training_sizes:
   - 10
   - 25
   n_folds: 3
+  test_size_per_class: 50
   batch_size: 32
-  random_seeds: [1,2,3,4,5]
+  random_seeds: [1,2,3]
   kfold_seed: 1
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
