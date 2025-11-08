@@ -1,116 +1,124 @@
-# Non-Avian ML Project
+# Non-Avian ML Audio Classification
 
-A machine learning project for comparing model type performance on non-avian animal sounds using Cloud Run jobs.
+## Overview
 
-## Prerequisites
+A machine learning framework for comparing audio classification models across different training set sizes. Evaluates performance using frozen pretrained embeddings from five models on binary classification tasks (e.g., coyote presence/absence).
 
-- [Pixi](https://prefix.dev/) package manager
-- Google Cloud SDK
-- Access to Google Cloud project `dse-staff`
+**Workflow:** Extract frozen embeddings → Train MLP classifier head → Evaluate on fixed test set
 
-## Setup & Authentication
+## Models
 
-1. Clone the repository, set directory:
-```bash
-git clone https://github.com/yourusername/non-avian-ml.git
-cd non-avian-ml
+| Model | Embedding Dim | Pretrained On | Audio Input |
+|-------|--------------|---------------|-------------|
+| **BirdNET** | 6522-D (logits) | Bird species (TFLite) | 3s @ 48kHz |
+| **Perch** | 1280-D | Bird vocalizations | 5s @ 32kHz |
+| **ResNet18** | 512-D | ImageNet | Mel-spectrogram |
+| **MobileNetV2** | 1280-D | ImageNet | Mel-spectrogram |
+| **VGG11** | 4096-D | ImageNet | Mel-spectrogram |
+
+## Usage
+
+### Configuration
+
+Edit `src/config.yaml`:
+
+```yaml
+experiments:
+- name: all_models_test
+  models: [birdnet, perch, resnet, mobilenet, vgg]
+  species: [coyote, bullfrog]
+  training_sizes: [10, 20, 40, 60, 80, 100, 120]  # Samples per class
+  n_folds: 5                              # K-fold CV folds
+  n_epochs: 20                            # Training epochs for classifier
+  test_size_per_class: 50                 # Fixed test set size
+  batch_size: 32                          # Batch size for training
+  random_seeds: [1,2,3,4,5,6,7,8,9,10]   # Multiple runs for statistics
+  kfold_seed: 1                           # Fixed for reproducibility
+  data_path: /workspaces/non-avian-ml/data
+  results_path: /workspaces/non-avian-ml/results
+  datatype: data                          # "data" or "data_5s"
 ```
 
-2. Authenticate with Google Cloud:
+**Key Parameters:**
+- `training_sizes`: Sample sizes per class to evaluate (creates learning curves)
+- `n_folds`: Number of cross-validation folds (5 is standard)
+- `n_epochs`: Training epochs for MLP classifier (20 typical for convergence)
+- `batch_size`: Training batch size (32 is standard, reduce if memory limited)
+- `random_seeds`: Multiple runs with different training samples (10 recommended for publication)
 
-Login to Google Cloud and set up default credentials
-```bash
-gcloud auth application-default login
-```
-Verify the container image exists in Artifact Registry
-```bash
-gcloud artifacts docker images describe \
-    us-central1-docker.pkg.dev/dse-staff/non-avian-ml/model:latest
-```
+### Run Experiment
 
-3. Set up service account permissions (storage viewer and bucket reader):
 ```bash
-gcloud projects add-iam-policy-binding dse-staff \
-    --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
-    --role="roles/storage.objectViewer" && \
-gcloud projects add-iam-policy-binding dse-staff \
-    --member="serviceAccount:cloud-run-jobs@dse-staff.iam.gserviceaccount.com" \
-    --role="roles/storage.bucketViewer"
+cd /workspaces/non-avian-ml
+pixi run python src/main.py
 ```
 
-## Running the Project
+### Results
 
-1. Initialize the Pixi environment:
-(Not necessary if opened in Container in VS Code)
+**CSV Output (`experiment_results.csv`):**
+
+| Column | Description |
+|--------|-------------|
+| `model`, `species`, `training_size` | Experiment parameters |
+| `n_folds`, `n_epochs`, `batch_size`, `test_size_per_class` | Configuration used |
+| `cv_auc_mean`, `cv_auc_std`, `cv_auc_ci_95`, `cv_auc_n` | Cross-validation statistics |
+| `test_auc_mean`, `test_auc_std`, `test_auc_ci_95`, `test_auc_n` | Test set statistics |
+
+- **`*_mean`**: Average performance across random seeds
+- **`*_std`**: Standard deviation (measures variability)
+- **`*_ci_95`**: 95% confidence interval (±CI around mean)
+- **`*_n`**: Number of runs aggregated
+
+**Plot (`experiment_results_plot.png`):**
+- Learning curves showing test AUC vs. training size
+- Error bars represent 95% confidence intervals
+- Separate subplot per species
+
+## Data Structure
+
+```
+data/
+└── {species}/
+    ├── data/              # 3s clips for BirdNET, CNNs
+    │   ├── pos/*.wav
+    │   └── neg/*.wav
+    └── data_5s/           # 5s clips for Perch
+        ├── pos/*.wav
+        └── neg/*.wav
+```
+
+**Minimum files per class:** 150+ (50 test + 100 train + buffer)
+
+## Key Features
+
+- **Fixed test set:** Identical 100 samples (50 pos/neg) for all experiments
+- **Frozen embeddings:** Pretrained models used as feature extractors
+- **Stratified K-fold CV:** Robust within-training evaluation
+- **Statistical rigor:** 95% confidence intervals from multiple runs
+- **Fully reproducible:** Deterministic splits with fixed seeds
+
+## Installation
+
 ```bash
+# Install dependencies via pixi
 pixi install
-```
-Option A. Launch single experiment example: 
-```bash
-export DATA_DIR="/tmp/data/audio" && \
-mkdir -p "${DATA_DIR}/coyote/data/"{pos,neg} && \
-gsutil -m cp "gs://dse-staff/soundhub/data/audio/coyote/data/pos/*" "${DATA_DIR}/coyote/data/pos/" && \
-gsutil -m cp "gs://dse-staff/soundhub/data/audio/coyote/data/neg/*" "${DATA_DIR}/coyote/data/neg/" && \
-pixi run python src/main.py --model mobilenet --species coyote --train_size 10 --seed 1 --datatype data --batch_size 32 --n_folds 2 --datapath "${DATA_DIR}" && \
-rm -rf "${DATA_DIR}" /tmp/results
-```
-Option B. Launch multi-model and species experiment to Cloud Run:
-```bash
-pixi run python src/launch_jobs.py --project-id dse-staff && \
-gcloud beta run jobs list \
-  --project dse-staff \
-  --region us-central1 \
-  --format="value(name)" | \
-  xargs -I {} -P 10 gcloud run jobs execute {} \
-  --project dse-staff --region us-central1
+
+# Or manually install required packages:
+# PyTorch, torchaudio, torchvision
+# TensorFlow, ai-edge-litert, tensorflow-hub
+# scikit-learn, librosa, soundfile
+# pandas, matplotlib, numpy
 ```
 
-## Configuration
+## Citation
 
-Experiment configurations can be modified in `src/launch_jobs.py`:
-
-```python
-EXPERIMENT_CONFIG = {
-    "models": ["mobilenet", "birdnet"],
-    "species": ["coyote", "bullfrog"],
-    "train_sizes": [10, 20],
-    "seeds": [1, 2],
-    "datatypes": ["data"],
-    "batch_sizes": [32],
-    "n_folds": [5],
+```bibtex
+@software{non_avian_ml_2025,
+  title = {Non-Avian ML Audio Classification Framework},
+  author = {Van Scoyoc, Amy},
+  year = {2025},
+  url = {https://github.com/avanscoyoc/non-avian-ml}
 }
 ```
-
-## Monitoring Jobs
-
-Monitor the status of your jobs:
-```bash
-gcloud run jobs executions list --project dse-staff --region us-central1
+}
 ```
-```bash
-gcloud run jobs describe JOB_NAME --project dse-staff --region us-central1
-```
-
-## Project Structure
-
-```
-.
-├── src/
-│   ├── launch_jobs.py    # Cloud Run job launcher
-│   ├── main.py          # Main experiment runner
-│   └── ...
-├── pixi.toml           # Pixi package configuration
-└── README.md
-```
-
-## Troubleshooting
-
-If jobs fail to execute, check:
-1. Service account permissions in Google Cloud Console
-2. Cloud Run job logs in Google Cloud Console
-3. GCS bucket access permissions
-4. Container image availability in Artifact Registry
-
-## License
-
-to add...

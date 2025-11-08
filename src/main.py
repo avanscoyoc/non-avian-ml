@@ -1,115 +1,91 @@
-import logging
-import os
-from evaluate import evaluate_model
-from save_results import ResultsManager
-from config import parse_args
+from pathlib import Path
+from config import load_config
+from data_loader import (
+    load_audio_files,
+    create_kfold_splits,
+    create_train_test_split,
+)
+from model_loader import load_model
+from trainer import train_model, evaluate_model
+from results import save_results, plot_species_models
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
+def main():
+    config_path = Path(__file__).parent / "config.yaml"
+    config = load_config(str(config_path))
+    all_results = []
 
-def run_experiment(
-    model_name: str,
-    species_list: list,
-    training_size: int,
-    batch_size: int = 32,
-    n_folds: int = 5,
-    random_seed: int = 42,
-    datatype: str = "data",
-    datapath: str = None,  # Make this optional
-    results_path: str = "/tmp/results",  # Use temp directory
-    gcs_bucket: str = None,  # Make this optional
-) -> dict:
-    """Run a single experiment with given parameters"""
-    # Use environment variables or defaults
-    datapath = datapath or os.getenv("DATA_PATH", "/tmp/data/audio")
-    gcs_bucket = gcs_bucket or os.getenv("GCS_BUCKET", "dse-staff")
-    gcs_prefix = os.getenv("GCS_PREFIX", "soundhub")
+    for species in config.species:
+        print(f"\n{'=' * 80}\nSpecies: {species}\n{'=' * 80}")
 
-    try:
-        results, fold_scores = evaluate_model(
-            model_name=model_name,
-            species_list=species_list,
-            training_size=training_size,
-            batch_size=batch_size,
-            n_folds=n_folds,
-            random_seed=random_seed,
-            datatype=datatype,
-            datapath=datapath,
-            results_path=results_path,
-            gcs_bucket=gcs_bucket,
-        )
+        for model_name in config.models:
+            datatype = "data_5s" if model_name == "perch" else config.datatype
 
-        logger.info(
-            f"Model: {model_name}, Species: {species_list}, Training size: {training_size}"
-        )
-        for species, roc_auc in results.items():
-            logger.info(f"{species}: Mean ROC-AUC = {roc_auc:.4f}")
-            for fold_idx, fold_score in enumerate(fold_scores[species]):
-                logger.info(f"  Fold {fold_idx + 1}: {fold_score:.4f}")
+            train_pos, train_neg, test_pos, test_neg = create_train_test_split(
+                config.data_path,
+                species,
+                datatype,
+                config.test_size_per_class,
+                config.kfold_seed,
+            )
 
-        return results, fold_scores
+            test_files = test_pos + test_neg
+            test_labels = [1] * len(test_pos) + [0] * len(test_neg)
 
-    except Exception as e:
-        logger.error(f"Error in experiment: {str(e)}")
-        raise
+            print(f"\n[{model_name.upper()}] Test set: {len(test_pos)} pos / {len(test_neg)} neg")
+
+            for training_size in config.training_sizes:
+                print(f"  Training size: {training_size} per class")
+
+                for random_seed in config.random_seeds:
+                    files, labels = load_audio_files(
+                        training_size, train_pos, train_neg, random_seed
+                    )
+
+                    fold_scores = []
+                    for train_files, train_labels, val_files, val_labels in create_kfold_splits(
+                        files, labels, config.n_folds, config.kfold_seed
+                    ):
+                        model, device = load_model(model_name)
+                        trained_model = train_model(
+                            model, train_files, train_labels, device, config.batch_size, config.n_epochs
+                        )
+                        val_score = evaluate_model(
+                            trained_model, val_files, val_labels, device, model
+                        )
+                        fold_scores.append(val_score)
+
+                    final_model, device = load_model(model_name)
+                    final_trained = train_model(final_model, files, labels, device, config.batch_size, config.n_epochs)
+                    test_score = evaluate_model(
+                        final_trained, test_files, test_labels, device, final_model
+                    )
+
+                    cv_mean = sum(fold_scores) / len(fold_scores)
+                    all_results.append(
+                        {
+                            "species": species,
+                            "model": model_name,
+                            "training_size": training_size,
+                            "n_folds": config.n_folds,
+                            "n_epochs": config.n_epochs,
+                            "batch_size": config.batch_size,
+                            "test_size_per_class": config.test_size_per_class,
+                            "random_seed": random_seed,
+                            "cv_auc_mean": cv_mean,
+                            "test_auc": test_score,
+                        }
+                    )
+                    print(f"    Seed {random_seed}: CV AUC={cv_mean:.4f} | Test AUC={test_score:.4f}")
+
+    output_file = f"{config.results_path}/results_{species}.csv"
+    df = save_results(all_results, output_file)
+    print(f"\nResults saved: {output_file}")
+
+    plot_file = output_file.replace(".csv", "_plot.png")
+    plot_species_models(df, plot_file)
+    print(f"Plot saved: {plot_file}")
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    # Try to use GCS if credentials are available
-    try:
-        from google.cloud import storage
-
-        client = storage.Client(project="dse-staff")
-        logger.info(f"Connected to GCP project: {client.project}")
-
-        # Test bucket access
-        bucket_name = args.gcs_bucket.split("/")[0] if args.gcs_bucket else "dse-staff"
-        bucket = client.bucket(bucket_name)
-        try:
-            bucket.exists()
-            logger.info(f"Successfully accessed bucket: {bucket_name}")
-            results_manager = ResultsManager(use_gcs=True)
-        except Exception as bucket_error:
-            logger.warning(f"Bucket access failed: {str(bucket_error)}")
-            raise
-
-    except Exception as e:
-        logger.warning(f"GCS setup failed: {str(e)}")
-        logger.info("Falling back to local storage only")
-        results_manager = ResultsManager(use_gcs=False)
-
-    results, fold_scores = run_experiment(
-        model_name=args.model,
-        species_list=args.species,
-        training_size=args.train_size,
-        batch_size=args.batch_size,
-        n_folds=args.n_folds,
-        random_seed=args.seed,
-        datatype=args.datatype,
-        datapath=args.datapath,
-        results_path=args.results_path,
-        gcs_bucket=args.gcs_bucket,
-    )
-
-    # Save results
-    results_dict = {
-        "mean_roc_auc": results[args.species[0]],
-        "fold_scores": {
-            i: score for i, score in enumerate(fold_scores[args.species[0]])
-        },
-    }
-
-    saved_path = results_manager.save_results(
-        results_dict=results_dict,
-        model_name=args.model,
-        species=args.species[0],
-        datatype=args.datatype,
-        training_size=args.train_size,
-        batch_size=args.batch_size,
-        n_folds=args.n_folds,
-        gcs_bucket=args.gcs_bucket,
-    )
-
-    logger.info(f"Results saved to: {saved_path}")
+    main()

@@ -1,21 +1,24 @@
-# First, grab a Unix image with pixi installed
-FROM ghcr.io/prefix-dev/pixi:0.41.4-bullseye-slim
+# Use Ubuntu 22.04 for better ARM64 support
+FROM ubuntu:22.04
 
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies including Python
 RUN apt-get update && apt-get install -y \
     curl \
+    python3.10 \
+    python3-pip \
+    libsndfile1 \
+    ffmpeg \
     git \
-    apt-transport-https \
-    ca-certificates \
-    gnupg \
-    && echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
-    | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list \
-    && curl https://packages.cloud.google.com/apt/doc/apt-key.gpg \
-    | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - \
-    && apt-get update && apt-get install -y google-cloud-sdk \
     && rm -rf /var/lib/apt/lists/*
 
+# Create symlinks for python
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python
+
+# Install pixi
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+ENV PATH="/root/.pixi/bin:${PATH}"
+
 WORKDIR /workspaces/non-avian-ml
-
-COPY pixi.toml pixi.lock ./
-
-RUN pixi install

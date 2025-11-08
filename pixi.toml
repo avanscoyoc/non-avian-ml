@@ -1,43 +1,32 @@
-[project]
+[workspace]
 authors = ["Amy Van Scoyoc <avanscoyoc@berkeley.edu>"]
 channels = ["conda-forge"]
 description = "A comparison of machine learning model performance on non-avian audio"
 name = "non-avian-ml"
-platforms = ["linux-64"]
+platforms = ["linux-aarch64", "osx-arm64"]
 version = "0.1.0"
-
-[tasks]
-install-chirp = "pip install git+https://github.com/google-research/perch.git"
 
 [dependencies]
 python = "3.10.*"
-libgl = "*"
-glib = "*"
-pixi-kernel = ">=0.6.2,<0.7"
-pip = ">=25.0.1,<26"
-fastapi = ">=0.115.12,<0.116"
-uvicorn = ">=0.34.3,<0.35"
-click = ">=8.2.1,<9"
-
-[pypi-dependencies] 
-tensorflow = "==2.14.0"
-tensorflow_hub = "*"
-opensoundscape = "==0.11.0" 
-torch = "*"
-numpy = "*"
-pandas = "*"
-tqdm = "*"
-timm = "*"
+# Core ML frameworks from conda-forge (better ARM support)
+pytorch = "*"
+torchvision = "*"
 torchaudio = "*"
-executing = "*"
-scikit-learn = ">=1.6.1, <2"
-seaborn = "*"
-onnx = "*"
-onnxruntime = "*"
-ai-edge-litert = "*"
-google-cloud-storage = "*"
-google-cloud-run = "*"
-google-api-python-client = "*"  
-birdnetlib = "*"
+numpy = "*"
+scikit-learn = "*"
 librosa = "*"
+matplotlib = "*"
+seaborn = "*"
+pyyaml = "*"
+tqdm = "*"
+pip = "*"
+
+[pypi-dependencies]
+# Only packages not available in conda-forge
+tensorflow = ">=2.15.0"
+tensorflow_hub = "*"
+timm = "*"
+birdnetlib = "*"
+ai-edge-litert = "*"
 soundfile = "*"
+setuptools = "<81"  # Pin to avoid pkg_resources deprecation warning
