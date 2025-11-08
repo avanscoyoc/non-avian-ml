@@ -1,135 +1,79 @@
-import os
 import torch
-import numpy as np
-from sklearn.model_selection import StratifiedKFold
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score
-from torch.utils.data import DataLoader as TorchDataLoader
-from torch import nn, optim
-
-from model_loader import ModelLoader
-from data_processor import DataProcessor as CustomDataLoader
-from save_results import ResultsManager
 
 
-class BaseModelWrapper:
-    def __init__(self, model, model_type):
-        self.model = model
-        self.model_type = model_type  # "torch" or "bioacoustics"
+def train_model(model, train_files, train_labels, device, batch_size=32, n_epochs=20):
+    """Train MLP classifier on frozen embeddings."""
+    print(f"  Extracting embeddings: {len(train_files)} files")
 
-    def train(self, train_data, train_labels, val_data, val_labels):
-        raise NotImplementedError
+    embeddings = []
+    for i, file_path in enumerate(train_files):
+        if (i + 1) % 50 == 0:
+            print(f"    Progress: {i + 1}/{len(train_files)}")
+        emb = model.extract_embeddings(file_path)
+        embeddings.append(emb.flatten())
 
-    def predict(self, val_data):
-        raise NotImplementedError
+    embeddings_tensor = torch.stack(embeddings).to(device)
+    labels_tensor = torch.tensor(train_labels, dtype=torch.long).to(device)
 
+    print(f"  Training classifier: {embeddings_tensor.shape}")
 
-class TorchModelWrapper(BaseModelWrapper):
-    def __init__(self, model):
-        super().__init__(model, model_type="torch")
-        self.criterion = nn.BCEWithLogitsLoss()
-        self.optimizer = optim.Adam(model.parameters())
-        self.epochs = 10
-        self.device = next(model.parameters()).device
+    embedding_dim = embeddings_tensor.shape[1]
+    classifier = nn.Sequential(
+        nn.Linear(embedding_dim, 256),
+        nn.ReLU(),
+        nn.Dropout(0.3),
+        nn.Linear(256, 64),
+        nn.ReLU(),
+        nn.Dropout(0.3),
+        nn.Linear(64, 2),
+    ).to(device)
 
-    def train_and_predict(self, train_dataset, val_dataset, batch_size):
-        train_loader = TorchDataLoader(train_dataset,
-                                       batch_size=batch_size, shuffle=True)
-        val_loader = TorchDataLoader(val_dataset, batch_size=batch_size)
+    dataset = TensorDataset(embeddings_tensor, labels_tensor)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-        # Training loop
-        for epoch in range(self.epochs):
-            self.model.train()
-            for batch_idx, (data, target) in enumerate(train_loader):
-                data, target = data.to(self.device), target.to(self.device).float()
-                self.optimizer.zero_grad()
-                output = self.model(data)
-                loss = self.criterion(output.squeeze(), target)
-                loss.backward()
-                self.optimizer.step()
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=0.001)
 
-            # Validation
-            self.model.eval()
-            val_loss = 0
-            with torch.no_grad():
-                for data, target in val_loader:
-                    data, target = data.to(self.device), target.to(self.device).float()
-                    output = self.model(data)
-                    val_loss += self.criterion(output.squeeze(), target).item()
+    classifier.train()
+    for epoch in range(n_epochs):
+        epoch_loss = 0.0
+        for features, labels in dataloader:
+            optimizer.zero_grad()
+            outputs = classifier(features)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            epoch_loss += loss.item()
 
-            print(f'Epoch: {epoch+1}, Val Loss: {val_loss/len(val_loader):.4f}')
+        if epoch % 5 == 0:
+            avg_loss = epoch_loss / len(dataloader)
+            print(f"    Epoch {epoch}: loss={avg_loss:.4f}")
 
-        # Prediction
-        self.model.eval()
-        predictions = []
-        with torch.no_grad():
-            for data, _ in val_loader:
-                data = data.to(self.device)
-                output = self.model(data)
-                pred = torch.sigmoid(output).cpu().numpy()
-                predictions.extend(pred.squeeze())
-
-        return predictions
+    return classifier
 
 
-class BioacousticsModelWrapper(BaseModelWrapper):
-    def __init__(self, model):
-        super().__init__(model, model_type="bioacoustics")
-        self.species = None
-        self.batch_size = 32
-        self.num_workers = os.cpu_count() * 3 // 4
+def evaluate_model(model, test_files, test_labels, device, original_embedding_model):
+    """Evaluate classifier on test set using embeddings."""
+    model.eval()
+    predictions = []
 
-    def embed_files(self, file_paths):
-        """Generate embeddings for a list of file paths."""
-        return self.model.embed(
-            file_paths,
-            return_dfs=False,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-        )
+    print(f"  Evaluating: {len(test_files)} files")
 
-    def train_and_predict(self, emb_train, train_labels, emb_val, val_labels):
-        """Train on embeddings and predict."""
-        self.model.change_classes([self.species])
-        self.model.network.fit(emb_train, train_labels, emb_val, val_labels)
-        preds = self.model.network(torch.tensor(emb_val, dtype=torch.float32)).detach().numpy()
-        return preds
+    with torch.no_grad():
+        for i, file_path in enumerate(test_files):
+            if (i + 1) % 50 == 0:
+                print(f"    Progress: {i + 1}/{len(test_files)}")
 
+            emb = original_embedding_model.extract_embeddings(file_path)
+            emb = emb.flatten().to(device)
 
-class Trainer:
-    def __init__(self, model_wrapper, folds, data_loader):
-        self.model_wrapper = model_wrapper
-        self.folds = folds
-        self.data_loader = data_loader
+            outputs = model(emb.unsqueeze(0))
+            probs = torch.softmax(outputs, dim=1)[0, 1]
+            predictions.append(probs.cpu().numpy())
 
-    def k_fold_train(self, df, species, batch_size=32):
-        if isinstance(self.model_wrapper, BioacousticsModelWrapper):
-            self.model_wrapper.species = species
-
-        file_paths = df.index.values
-        labels = df[species].values
-        skf = StratifiedKFold(n_splits=self.folds, shuffle=True, random_state=8)
-        fold_scores = []
-
-        for train_idx, val_idx in skf.split(file_paths, labels):
-            train_df = df.iloc[train_idx]
-            val_df = df.iloc[val_idx]
-
-            if isinstance(self.model_wrapper, BioacousticsModelWrapper):
-                train_files = train_df.index.tolist()
-                val_files = val_df.index.tolist()
-                emb_train = self.model_wrapper.embed_files(train_files)
-                emb_val = self.model_wrapper.embed_files(val_files)
-
-                train_labels = train_df[species].values.reshape(-1, 1)
-                val_labels = val_df[species].values.reshape(-1, 1)
-
-                preds = self.model_wrapper.train_and_predict(emb_train, train_labels, emb_val, val_labels)
-            else:
-                train_dataset = self.data_loader.get_dataset(train_df, species, self.model_wrapper.model_type)
-                val_dataset = self.data_loader.get_dataset(val_df, species, self.model_wrapper.model_type)
-                preds = self.model_wrapper.train_and_predict(train_dataset, val_dataset, batch_size)
-
-            roc_auc = roc_auc_score(val_df[species].values, preds)
-            fold_scores.append(roc_auc)
-
-        return np.mean(fold_scores), fold_scores
+    auc_score = roc_auc_score(test_labels, predictions)
+    print(f"  AUC: {auc_score:.4f}")
+    return auc_score

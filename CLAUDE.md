@@ -39,7 +39,7 @@ Build an application that runs multi-factor ML experiments on audio classificati
 Achieve the most efficient and maintainable solution, DO NOT include print statements, errors, and keep the code as simple and concises as possible and as organized as possible so that I can read it. 
 
 ## Deliverables
-1. Complete application source code with proper structure in src2
+1. Complete application source code with proper structure in src
 2. Documentation (README)
 
 Create a production-ready solution that follows best practices for iterating a module with different arguments in a container and saves results. then i should be able to plot the results with the visualization module according to the Output visualisation suggestion above. 

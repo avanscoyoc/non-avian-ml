@@ -1,12 +1,10 @@
 {
-  "name": "Non-Avian ML Dev Container",
+  "name": "Non-Avian ML",
   "build": {
     "dockerfile": "Dockerfile",
-    "context": "../", 
-    "options": [
-      "--platform=linux/amd64"
-    ]
-  },"mounts": [
+    "context": "../"
+  },
+  "mounts": [
     "source=${localWorkspaceFolderBasename}-pixi,target=${containerWorkspaceFolder}/.pixi,type=volume"
   ],
   "postCreateCommand": "pixi install",
@@ -14,29 +12,12 @@
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-python.debugpy",
-        "jjjermiah.pixi-vscode",
-        "github.vscode-github-actions",
-        "ms-azuretools.vscode-docker",
-        "charliermarsh.ruff",
-        "esbenp.prettier-vscode",
-        "ms-python.flake8",
-        "ms-toolsai.jupyter"
+        "ms-python.vscode-pylance"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/workspaces/non-avian-ml/.pixi/envs/default/bin/python",
-        "python.testing.pytestEnabled": true,
-        "[python]": {
-          "editor.formatOnSave": true,
-          "editor.defaultFormatter": "charliermarsh.ruff"
-        }
+        "python.defaultInterpreterPath": "/workspaces/non-avian-ml/.pixi/envs/default/bin/python"
       }
     }
   },
-  "features": {
-    "ghcr.io/devcontainers/features/github-cli:1": {},
-    "ghcr.io/devcontainers/features/common-utils:2.5.2": {
-      "installSsh": true
-    }
-  }
+  "remoteUser": "root"
 }
