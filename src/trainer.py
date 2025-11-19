@@ -1,7 +1,21 @@
+import gc
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import roc_auc_score
+
+
+def cleanup_model(model):
+    """Release model resources and clear cache."""
+    if model is not None:
+        # Clean up TensorFlow models specifically
+        if hasattr(model, 'cleanup'):
+            model.cleanup()
+        del model
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
 
 
 def train_model(model, train_files, train_labels, device, batch_size=32, n_epochs=20):
