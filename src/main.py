@@ -6,14 +6,15 @@ from data_loader import (
     create_train_test_split,
 )
 from model_loader import load_model
-from trainer import train_model, evaluate_model
-from results import save_results, plot_species_models
+from zero_shot import evaluate_zero_shot
+from trainer import train_model, evaluate_model, cleanup_model
+from results import save_run_result, aggregate_results, save_results, plot_species_models
 
 
 def main():
     config_path = Path(__file__).parent / "config.yaml"
     config = load_config(str(config_path))
-    all_results = []
+    Path(config.results_path).mkdir(parents=True, exist_ok=True)
 
     for species in config.species:
         print(f"\n{'=' * 80}\nSpecies: {species}\n{'=' * 80}")
@@ -38,32 +39,41 @@ def main():
                 print(f"  Training size: {training_size} per class")
 
                 for random_seed in config.random_seeds:
-                    files, labels = load_audio_files(
-                        training_size, train_pos, train_neg, random_seed
-                    )
-
-                    fold_scores = []
-                    for train_files, train_labels, val_files, val_labels in create_kfold_splits(
-                        files, labels, config.n_folds, config.kfold_seed
-                    ):
-                        model, device = load_model(model_name)
-                        trained_model = train_model(
-                            model, train_files, train_labels, device, config.batch_size, config.n_epochs
+                    # Skip if already completed
+                    run_file = Path(config.results_path) / f"run_{species}_{model_name}_{training_size}_{random_seed}.csv"
+                    if run_file.exists():
+                        print(f"    Seed {random_seed}: Already completed (skipping)")
+                        continue
+                    
+                    try:
+                        files, labels = load_audio_files(
+                            training_size, train_pos, train_neg, random_seed
                         )
-                        val_score = evaluate_model(
-                            trained_model, val_files, val_labels, device, model
+
+                        fold_scores = []
+                        for train_files, train_labels, val_files, val_labels in create_kfold_splits(
+                            files, labels, config.n_folds, config.kfold_seed
+                        ):
+                            model, device = load_model(model_name)
+                            trained_model = train_model(
+                                model, train_files, train_labels, device, config.batch_size, config.n_epochs
+                            )
+                            val_score = evaluate_model(
+                                trained_model, val_files, val_labels, device, model
+                            )
+                            fold_scores.append(val_score)
+                            
+                            del trained_model
+                            cleanup_model(model)
+
+                        final_model, device = load_model(model_name)
+                        final_trained = train_model(final_model, files, labels, device, config.batch_size, config.n_epochs)
+                        test_score = evaluate_model(
+                            final_trained, test_files, test_labels, device, final_model
                         )
-                        fold_scores.append(val_score)
 
-                    final_model, device = load_model(model_name)
-                    final_trained = train_model(final_model, files, labels, device, config.batch_size, config.n_epochs)
-                    test_score = evaluate_model(
-                        final_trained, test_files, test_labels, device, final_model
-                    )
-
-                    cv_mean = sum(fold_scores) / len(fold_scores)
-                    all_results.append(
-                        {
+                        cv_mean = sum(fold_scores) / len(fold_scores)
+                        result = {
                             "species": species,
                             "model": model_name,
                             "training_size": training_size,
@@ -75,16 +85,31 @@ def main():
                             "cv_auc_mean": cv_mean,
                             "test_auc": test_score,
                         }
-                    )
-                    print(f"    Seed {random_seed}: CV AUC={cv_mean:.4f} | Test AUC={test_score:.4f}")
+                        save_run_result(result, config.results_path)
+                        print(f"    Seed {random_seed}: CV AUC={cv_mean:.4f} | Test AUC={test_score:.4f}")
+                        
+                        del final_trained
+                        cleanup_model(final_model)
+                    
+                    except Exception as e:
+                        print(f"    ERROR Seed {random_seed}: {e}")
+                        continue
 
-    output_file = f"{config.results_path}/results_{species}.csv"
-    df = save_results(all_results, output_file)
-    print(f"\nResults saved: {output_file}")
+            # Run zero-shot evaluation AFTER all training sizes/seeds complete
+            print(f"\n[{model_name.upper()}] Running zero-shot evaluation...")
+            evaluate_zero_shot(species, model_name, test_files, test_labels, config)
+            
+        # Aggregate all runs for this species
+        print(f"\nAggregating results for {species}...")
+        all_runs = aggregate_results(config.results_path, species)
+        if all_runs is not None:
+            output_file = f"{config.results_path}/results_{species}.csv"
+            df = save_results(all_runs.to_dict('records'), output_file)
+            print(f"Results saved: {output_file}")
 
-    plot_file = output_file.replace(".csv", "_plot.png")
-    plot_species_models(df, plot_file)
-    print(f"Plot saved: {plot_file}")
+            plot_file = output_file.replace(".csv", "_plot.png")
+            plot_species_models(df, plot_file)
+            print(f"Plot saved: {plot_file}")
 
 
 if __name__ == "__main__":

@@ -4,6 +4,22 @@ import numpy as np
 from pathlib import Path
 
 
+def save_run_result(result, results_path):
+    """Save single run result immediately to CSV."""
+    output_file = Path(results_path) / f"run_{result['species']}_{result['model']}_{result['training_size']}_{result['random_seed']}.csv"
+    pd.DataFrame([result]).to_csv(output_file, index=False)
+
+
+def aggregate_results(results_path, species):
+    """Load all run CSVs for a species and aggregate statistics."""
+    run_files = sorted(Path(results_path).glob(f"run_{species}_*.csv"))
+    if not run_files:
+        return None
+    
+    all_runs = pd.concat([pd.read_csv(f) for f in run_files], ignore_index=True)
+    return all_runs
+
+
 def save_results(results, output_path):
     """Aggregate results across random seeds and save to CSV."""
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

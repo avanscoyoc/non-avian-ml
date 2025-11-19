@@ -83,6 +83,14 @@ class PerchModel:
             self._infer = self._model
         print(f"[Perch] Model loaded (embedding dim: {self.feature_dim})")
 
+    def cleanup(self):
+        """Clean up TensorFlow resources."""
+        import gc
+        self.tf.keras.backend.clear_session()
+        del self._model
+        del self._infer
+        gc.collect()
+
     def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
         y, sr = self.sf.read(audio_file_path, dtype="float32")
         if sr != self.sample_rate:
