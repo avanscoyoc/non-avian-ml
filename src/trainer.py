@@ -7,12 +7,26 @@ from sklearn.metrics import roc_auc_score
 
 def cleanup_model(model):
     """Release model resources and clear cache."""
-    if model is not None:
-        # Clean up TensorFlow models specifically
-        if hasattr(model, 'cleanup'):
-            model.cleanup()
-        del model
+    if model is None:
+        return
+    
+    # Handle Perch models with TensorFlow cleanup
+    if hasattr(model, 'cleanup'):
+        model.cleanup()
+    
+    # Handle PyTorch CNN models
+    elif isinstance(model, nn.Module):
+        model.cpu()
+        for param in model.parameters():
+            del param
+    
+    # Handle BirdNET TFLite models
+    elif hasattr(model, 'interpreter'):
+        del model.interpreter
+    
+    del model
     gc.collect()
+    
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
