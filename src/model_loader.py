@@ -33,6 +33,13 @@ class BirdNETModel:
         self.feature_dim = self.output_details[0]["shape"][1]
         print(f"[BirdNET] Model loaded (embedding dim: {self.feature_dim})")
 
+    def cleanup(self):
+        """Clean up TFLite resources."""
+        import gc
+        if hasattr(self, 'interpreter'):
+            del self.interpreter
+        gc.collect()
+
     def _load_audio(self, path: str) -> np.ndarray:
         y, sr = librosa.load(path, sr=self.sample_rate, mono=True)
         target_len = int(self.sample_rate * self.length_s)
@@ -170,6 +177,16 @@ class CNNEmbeddingModel(nn.Module):
             param.requires_grad = False
 
         print(f"[{backbone_name.upper()}] Model loaded (embedding dim: {self.feature_dim})")
+
+    def cleanup(self):
+        """Clean up PyTorch model resources."""
+        import gc
+        self.cpu()
+        for param in self.parameters():
+            del param
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     def forward(self, x):
         x = self.feature_extractor(x)
