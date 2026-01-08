@@ -1,20 +1,17 @@
 experiments:
 - name: all_models_test
   models:
-  - perch
   - birdnet
-  - vgg
-  - mobilenet
-  - resnet
   species:
   - woodhouses_toad
-  training_sizes: [10, 20, 40, 60, 80, 100, 120]
+  training_sizes: [120]
   n_folds: 5
   n_epochs: 20
   batch_size: 32
   test_size_per_class: 50
-  random_seeds: [1,2,3,4,5]
+  random_seeds: [1]
   kfold_seed: 1
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
   datatype: data
+  save_classifier: true

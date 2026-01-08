@@ -2,6 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import torch
+import json
+import shutil
+from datetime import datetime
 
 
 def save_run_result(result, results_path):
@@ -97,3 +101,124 @@ def plot_species_models(df, output_path):
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close()
+
+
+def save_classifier_bundle(
+    classifier,
+    embedding_model,
+    model_name,
+    species,
+    training_size,
+    random_seed,
+    test_auc,
+    n_epochs,
+    results_path,
+):
+    """Save complete classifier bundle for deployment."""
+    bundle_name = f"{species}_{model_name}_{training_size}"
+    bundle_dir = Path(results_path) / "classifiers" / bundle_name
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    
+    print(f"  Saving classifier bundle to: {bundle_dir}")
+    
+    # 1. Save trained classifier
+    classifier_path = bundle_dir / "classifier.pth"
+    torch.save(classifier.state_dict(), classifier_path)
+    
+    # 2. Save embedding model
+    embedding_dir = bundle_dir / "embedding_model"
+    embedding_dir.mkdir(exist_ok=True)
+    
+    if model_name == "birdnet":
+        # Copy BirdNET TFLite model
+        src_model = Path("/workspaces/non-avian-ml/model_birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
+        dst_model = embedding_dir / "model.tflite"
+        shutil.copy2(src_model, dst_model)
+        
+        model_info = {
+            "type": "birdnet",
+            "embedding_dim": 6522,
+        }
+        
+        preprocessing = {
+            "sample_rate": 48000,
+            "duration_s": 3.0,
+        }
+        
+    elif model_name == "perch":
+        # Copy Perch SavedModel directory
+        src_model_dir = Path("/workspaces/non-avian-ml/model_perch_8")
+        for item in ["saved_model.pb", "variables", "assets"]:
+            src_item = src_model_dir / item
+            if src_item.exists():
+                if src_item.is_dir():
+                    shutil.copytree(src_item, embedding_dir / item, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(src_item, embedding_dir / item)
+        
+        model_info = {
+            "type": "perch",
+            "embedding_dim": 1280,
+        }
+        
+        preprocessing = {
+            "sample_rate": 32000,
+            "duration_s": 5.0,
+        }
+        
+    elif model_name in ["resnet", "mobilenet", "vgg"]:
+        # Save frozen CNN state_dict
+        torch.save(embedding_model.state_dict(), embedding_dir / "embedding_model.pth")
+        
+        embedding_dims = {"resnet": 512, "mobilenet": 1280, "vgg": 4096}
+        model_info = {
+            "type": model_name,
+            "embedding_dim": embedding_dims[model_name],
+        }
+        
+        preprocessing = {
+            "sample_rate": 16000,
+            "duration_s": 3.0,
+            "n_mels": 64,
+            "n_fft": 2048,
+            "hop_length": 512,
+        }
+    
+    else:
+        raise ValueError(f"Unknown model: {model_name}")
+    
+    # Save model_info.json
+    with open(embedding_dir / "model_info.json", "w") as f:
+        json.dump(model_info, f, indent=2)
+    
+    # 3. Save config.json
+    config = {
+        "species": species,
+        "model_name": model_name,
+        "training_size": training_size,
+        "embedding_dim": model_info["embedding_dim"],
+        "seed": random_seed,
+        "test_auc": float(test_auc),
+        "n_epochs": n_epochs,
+        "created_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(bundle_dir / "config.json", "w") as f:
+        json.dump(config, f, indent=2)
+    
+    # 4. Save preprocessing.json
+    with open(bundle_dir / "preprocessing.json", "w") as f:
+        json.dump(preprocessing, f, indent=2)
+    
+    # 5. Save labels.json
+    labels = {
+        "0": "absent",
+        "1": "present",
+        "species": species,
+    }
+    with open(bundle_dir / "labels.json", "w") as f:
+        json.dump(labels, f, indent=2)
+    
+    print(f"  Classifier bundle saved successfully!")
+    print(f"    - Classifier: {classifier_path.name}")
+    print(f"    - Embedding model: {embedding_dir.name}/")
+    print(f"    - Metadata: config.json, preprocessing.json, labels.json")

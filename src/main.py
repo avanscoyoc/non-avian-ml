@@ -8,7 +8,7 @@ from data_loader import (
 from model_loader import load_model
 from zero_shot import evaluate_zero_shot
 from trainer import train_model, evaluate_model, cleanup_model
-from results import save_run_result, aggregate_results, save_results, plot_species_models
+from results import save_run_result, aggregate_results, save_results, plot_species_models, save_classifier_bundle
 
 
 def main():
@@ -71,6 +71,20 @@ def main():
                         test_score = evaluate_model(
                             final_trained, test_files, test_labels, device, final_model
                         )
+
+                        # Save classifier bundle if enabled
+                        if config.save_classifier:
+                            save_classifier_bundle(
+                                classifier=final_trained,
+                                embedding_model=final_model,
+                                model_name=model_name,
+                                species=species,
+                                training_size=training_size,
+                                random_seed=random_seed,
+                                test_auc=test_score,
+                                n_epochs=config.n_epochs,
+                                results_path=config.results_path,
+                            )
 
                         cv_mean = sum(fold_scores) / len(fold_scores)
                         result = {
