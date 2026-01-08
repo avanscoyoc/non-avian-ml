@@ -17,6 +17,7 @@ class Config:
     data_path: str = "/workspaces/non-avian-ml/data"
     results_path: str = "/workspaces/non-avian-ml/results"
     datatype: str = "data"
+    save_classifier: bool = False
 
 
 def load_config(config_path: str = "config.yaml") -> Config:
@@ -37,4 +38,5 @@ def load_config(config_path: str = "config.yaml") -> Config:
         data_path=exp.get("data_path", "/workspaces/non-avian-ml/data"),
         results_path=exp.get("results_path", "/workspaces/non-avian-ml/results"),
         datatype=exp.get("datatype", "data"),
+        save_classifier=exp.get("save_classifier", False),
     )

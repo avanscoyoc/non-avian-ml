@@ -4,7 +4,9 @@
 __pycache__ 
 __MACOSX
 data/
+test_audio/
 results/
+results_plot_runs/
 tmp/
 * data
 .devcontainer/.env
