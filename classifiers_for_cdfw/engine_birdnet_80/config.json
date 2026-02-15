@@ -1,0 +1,10 @@
+{
+  "species": "engine",
+  "model_name": "birdnet",
+  "training_size": 80,
+  "embedding_dim": 6522,
+  "seed": 1,
+  "test_auc": 0.8676,
+  "n_epochs": 20,
+  "created_date": "2026-01-08 22:28:50"
+}
