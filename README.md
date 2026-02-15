@@ -29,7 +29,7 @@ experiments:
   species: [coyote, bullfrog]
   training_sizes: [10, 20, 40, 60, 80, 100, 120]  # Samples per class
   n_folds: 5                              # K-fold CV folds
-  n_epochs: 20                            # Training epochs for classifier
+  n_epochs: 20                            # Training epochs 
   test_size_per_class: 50                 # Fixed test set size
   batch_size: 32                          # Batch size for training
   random_seeds: [1,2,3,4,5,6,7,8,9,10]   # Multiple runs for statistics
@@ -73,6 +73,11 @@ pixi run python src/main.py
 - Learning curves showing test AUC vs. training size
 - Error bars represent 95% confidence intervals
 - Separate subplot per species
+
+# Current Performance
+Class specific AUC-RUC is measured on the diagonal, showing high performance on all classes except Engine and Human vocal (currently due to low sample size). Limited confusion between frog species due to sampling. 
+
+![Confusion Matrix](workspaces/non-avian-ml/confusion_matrices/summary_heatmap_f1_score.png)
 
 ## Data Structure
 
