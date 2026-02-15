@@ -55,7 +55,7 @@ pixi run python src/main.py
 
 ### Results
 
-![comparison_curves](/workspaces/non-avian-ml/figs/species_comparison.png)
+![comparison_curves](figs/species_comparison.png)
 Fig 1. Current performance of species classes by training size for 5 model architectures. 
 
 **CSV Output (`experiment_results.csv`):**
@@ -80,7 +80,7 @@ Fig 1. Current performance of species classes by training size for 5 model archi
 # Current Performance
 Class specific AUC-RUC is measured on the diagonal, showing high performance on all classes except Engine and Human vocal (currently due to low sample size). Limited confusion between frog species due to sampling. 
 
-![Confusion Matrix](workspaces/non-avian-ml/figs/summary_heatmap_f1_score.png)
+![Confusion Matrix](figs/summary_heatmap_f1_score.png)
 
 ## Data Structure
 
