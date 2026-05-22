@@ -2,27 +2,33 @@ experiments:
 - name: all_models_test
   models:
   - birdnet
+  - perch
+  - resnet
+  - mobilenet
+  - vgg
   species:
+  - american_bullfrog
+  - coyote
+  - device_static
   - engine
-  training_sizes: [80]
+  - field_cricket
+  - generator
+  - human_vocal
+  - nutria
+  - pacific_chorus_frog
+  - power_tools
+  - traffic
+  - wind
+  - woodhouses_toad
+  - yellow_legged_frog
+  training_sizes: [10, 20, 40, 80, 160]
   n_folds: 5
   n_epochs: 20
   batch_size: 32
   test_size_per_class: 50
-  random_seeds: [1]
+  random_seeds: [1,2,3,4,5,6,7,8,9,10]
   kfold_seed: 1
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
   datatype: data
-  save_classifier: true
-
-
-  python batch_inference.py \
-    results/classifiers/woodhouses_toad_birdnet_120/ \
-    results/classifiers/bullfrog_birdnet_120/ \
-    results/classifiers/coyote_birdnet_120/ \
-    results/classifiers/pacific_chorus_frog_birdnet_120/ \
-    results/classifiers/field_cricket_birdnet_120/ \
-    results/classifiers/human_vocal_birdnet_20/ \
-    results/classifiers/engine_birdnet_80/ \
-    --output inference_results.csv
+  save_classifier: false
