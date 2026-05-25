@@ -3,11 +3,13 @@
 .pixi
 __pycache__ 
 __MACOSX
-data/
-test_audio/
-results/
-results_plot_runs/
-tmp/
+data
+test_audio
+results
+results_plot_runs
+tmp
 * data
 .devcontainer/.env
-confusion_matrices/
+confusion_matrices
+.DS_Store
+.ipynb_checkpoints  

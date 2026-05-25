@@ -7,20 +7,9 @@ experiments:
   - mobilenet
   - vgg
   species:
-  - american_bullfrog
-  - coyote
-  - device_static
   - engine
   - field_cricket
   - generator
-  - human_vocal
-  - nutria
-  - pacific_chorus_frog
-  - power_tools
-  - traffic
-  - wind
-  - woodhouses_toad
-  - yellow_legged_frog
   training_sizes: [10, 20, 40, 80, 160]
   n_folds: 5
   n_epochs: 20
