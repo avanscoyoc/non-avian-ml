@@ -61,6 +61,8 @@ def load_audio_files(training_size, train_pool_pos, train_pool_neg, random_seed=
 def preprocess_audio(file_path: str):
     """Convert audio to mel-spectrogram for CNN models."""
     waveform, sr = torchaudio.load(file_path)
+    if waveform.shape[0] > 1:
+        waveform = waveform.mean(dim=0, keepdim=True)
     if sr != 16000:
         resampler = T.Resample(sr, 16000)
         waveform = resampler(waveform)

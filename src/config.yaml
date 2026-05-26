@@ -1,14 +1,11 @@
 experiments:
 - name: all_models_test
   models:
-  - birdnet
-  - perch
   - resnet
   - mobilenet
   - vgg
+  - perch
   species:
-  - engine
-  - field_cricket
   - generator
   training_sizes: [10, 20, 40, 80, 160]
   n_folds: 5
