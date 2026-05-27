@@ -100,6 +100,14 @@ class PerchModel:
 
     def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
         y, sr = self.sf.read(audio_file_path, dtype="float32")
+
+        # Perch expects mono waveform shaped [batch, samples].
+        if y.ndim == 2:
+            # soundfile returns [samples, channels] for multi-channel audio.
+            y = np.mean(y, axis=1)
+        elif y.ndim > 2:
+            raise ValueError(f"Unsupported audio shape for {audio_file_path}: {y.shape}")
+
         if sr != self.sample_rate:
             y = librosa.resample(y, orig_sr=sr, target_sr=self.sample_rate)
         target_len = int(self.sample_rate * self.window_size_s)
