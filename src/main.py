@@ -36,6 +36,23 @@ def main():
             print(f"\n[{model_name.upper()}] Test set: {len(test_pos)} pos / {len(test_neg)} neg")
 
             for training_size in config.training_sizes:
+                # Pre-check: skip infeasible training sizes before touching any seeds
+                if len(train_pos) < training_size:
+                    print(f"  Training size: {training_size} per class  [SKIP: only {len(train_pos)} pos files available after test split]")
+                    continue
+                if len(train_neg) < training_size:
+                    print(f"  Training size: {training_size} per class  [SKIP: only {len(train_neg)} neg files available after test split]")
+                    continue
+
+                # Pre-check: skip if all seeds already completed
+                all_done = all(
+                    (Path(config.results_path) / f"run_{species}_{model_name}_{training_size}_{seed}.csv").exists()
+                    for seed in config.random_seeds
+                )
+                if all_done:
+                    print(f"  Training size: {training_size} per class  [SKIP: all {len(config.random_seeds)} seeds already completed]")
+                    continue
+
                 print(f"  Training size: {training_size} per class")
 
                 for random_seed in config.random_seeds:
