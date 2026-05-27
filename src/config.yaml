@@ -4,9 +4,8 @@ experiments:
   - resnet
   - mobilenet
   - vgg
-  - perch
   species:
-  - generator
+  - wind
   training_sizes: [10, 20, 40, 80, 160]
   n_folds: 5
   n_epochs: 20
