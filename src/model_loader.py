@@ -167,7 +167,7 @@ class CNNEmbeddingModel(nn.Module):
             base_model = models.vgg11(weights=VGG11_Weights.IMAGENET1K_V1)
             base_model.features[0] = nn.Conv2d(1, 64, kernel_size=3, padding=1)
             self.feature_extractor = base_model.features
-            self.feature_dim = 512
+            self.feature_dim = 4096
             self.pool = nn.AdaptiveAvgPool2d((7, 7))
             self.flatten_fc = nn.Sequential(
                 nn.Flatten(),
