@@ -19,6 +19,13 @@ def main():
     for species in config.species:
         print(f"\n{'=' * 80}\nSpecies: {species}\n{'=' * 80}")
 
+        if config.species_sizes and species in config.species_sizes:
+            test_size = config.species_sizes[species]["test"]
+            training_sizes = [config.species_sizes[species]["train"]]
+        else:
+            test_size = config.test_size_per_class
+            training_sizes = config.training_sizes
+
         for model_name in config.models:
             datatype = "data_5s" if model_name == "perch" else config.datatype
 
@@ -26,7 +33,7 @@ def main():
                 config.data_path,
                 species,
                 datatype,
-                config.test_size_per_class,
+                test_size,
                 config.kfold_seed,
             )
 
@@ -35,7 +42,7 @@ def main():
 
             print(f"\n[{model_name.upper()}] Test set: {len(test_pos)} pos / {len(test_neg)} neg")
 
-            for training_size in config.training_sizes:
+            for training_size in training_sizes:
                 # Pre-check: skip infeasible training sizes before touching any seeds
                 if len(train_pos) < training_size:
                     print(f"  Training size: {training_size} per class  [SKIP: only {len(train_pos)} pos files available after test split]")
@@ -111,7 +118,7 @@ def main():
                             "n_folds": config.n_folds,
                             "n_epochs": config.n_epochs,
                             "batch_size": config.batch_size,
-                            "test_size_per_class": config.test_size_per_class,
+                            "test_size_per_class": test_size,
                             "random_seed": random_seed,
                             "cv_auc_mean": cv_mean,
                             "test_auc": test_score,
@@ -127,8 +134,9 @@ def main():
                         continue
 
             # Run zero-shot evaluation AFTER all training sizes/seeds complete
-            print(f"\n[{model_name.upper()}] Running zero-shot evaluation...")
-            evaluate_zero_shot(species, model_name, test_files, test_labels, config)
+            if config.run_zeroshot:
+                print(f"\n[{model_name.upper()}] Running zero-shot evaluation...")
+                evaluate_zero_shot(species, model_name, test_files, test_labels, config)
             
         # Aggregate all runs for this species
         print(f"\nAggregating results for {species}...")
