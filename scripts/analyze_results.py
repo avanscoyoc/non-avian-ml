@@ -3,10 +3,10 @@
 Analyze batch inference results and generate confusion matrices.
 
 Usage:
-    python analyze_results.py <inference_results.csv>
+    python scripts/analyze_results.py <inference_results.csv>
 
 Example:
-    python analyze_results.py inference_results.csv
+    python scripts/analyze_results.py inference_results.csv
 """
 
 import pandas as pd

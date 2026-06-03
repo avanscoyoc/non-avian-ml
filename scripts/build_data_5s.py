@@ -7,8 +7,8 @@ Mirrors the full data/ structure (pos/ and neg/ subfolders) into data_5s/.
 
 Usage:
     cd /workspaces/non-avian-ml
-    pixi run python src/build_data_5s.py
-    pixi run python src/build_data_5s.py --dry-run
+    pixi run python scripts/build_data_5s.py
+    pixi run python scripts/build_data_5s.py --dry-run
 """
 
 import argparse

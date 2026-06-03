@@ -1,18 +1,18 @@
 from pathlib import Path
-from config import load_config
-from data_loader import (
+from src.config import load_config
+from src.data_loader import (
     load_audio_files,
     create_kfold_splits,
     create_train_test_split,
 )
-from model_loader import load_model
-from zero_shot import evaluate_zero_shot
-from trainer import train_model, evaluate_model, cleanup_model
-from results import save_run_result, aggregate_results, save_results, plot_species_models, save_classifier_bundle
+from src.model_loader import load_model
+from src.zero_shot import evaluate_zero_shot
+from src.trainer import train_model, evaluate_model, cleanup_model
+from src.results import save_run_result, aggregate_results, save_results, plot_species_models, save_classifier_bundle
 
 
 def main():
-    config_path = Path(__file__).parent / "config.yaml"
+    config_path = Path(__file__).parent / "src" / "config.yaml"
     config = load_config(str(config_path))
     Path(config.results_path).mkdir(parents=True, exist_ok=True)
 

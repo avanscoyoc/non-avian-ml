@@ -8,9 +8,9 @@ small-pool donors is redistributed to the largest available pools.
 
 Usage:
     cd /workspaces/non-avian-ml
-    pixi run python src/build_negatives.py
-    pixi run python src/build_negatives.py --datatype data_5s
-    pixi run python src/build_negatives.py --dry-run
+    pixi run python scripts/build_negatives.py
+    pixi run python scripts/build_negatives.py --datatype data_5s
+    pixi run python scripts/build_negatives.py --dry-run
 """
 
 import argparse
