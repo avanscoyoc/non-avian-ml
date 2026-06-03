@@ -15,7 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
@@ -187,6 +189,32 @@ def evaluate_classifier(
 
 
 # ---------------------------------------------------------------------------
+# Plotting
+# ---------------------------------------------------------------------------
+
+def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(max(8, len(label_names)), max(6, len(label_names) - 1)))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=label_names,
+        yticklabels=label_names,
+        ax=ax,
+    )
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title("Multiclass Confusion Matrix (BirdNET)")
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"  Confusion matrix saved to {output_path}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -239,6 +267,13 @@ def main():
 
     print("\nEvaluating on test set...")
     results = evaluate_classifier(classifier, test_embs, test_labels, label_names, device)
+
+    figs_path = Path(__file__).parent.parent / "figs"
+    plot_confusion_matrix(
+        results["confusion_matrix"],
+        label_names,
+        figs_path / "confusion_matrix_multiclass_birdnet.png",
+    )
 
     print("\nSaving classifier bundle...")
     save_classifier_bundle(

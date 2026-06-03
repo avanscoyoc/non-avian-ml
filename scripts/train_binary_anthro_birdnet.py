@@ -17,11 +17,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import classification_report, roc_auc_score
+from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
 from src.model_loader import BirdNETModel
 from src.results import save_classifier_bundle
@@ -167,9 +169,31 @@ def evaluate(classifier, embeddings, labels, device):
 
     true = np.array(labels)
     auc  = roc_auc_score(true, probs)
+    cm   = confusion_matrix(true, preds)
     print(f"\n  AUC: {auc:.4f}")
     print(classification_report(true, preds, target_names=["natural", "anthropogenic"], digits=3))
-    return auc
+    return auc, cm
+
+
+def plot_confusion_matrix(cm: np.ndarray, output_path: Path) -> None:
+    fig, ax = plt.subplots(figsize=(5, 4))
+    sns.heatmap(
+        cm,
+        annot=True,
+        fmt="d",
+        cmap="Blues",
+        xticklabels=["natural", "anthropogenic"],
+        yticklabels=["natural", "anthropogenic"],
+        ax=ax,
+    )
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("True")
+    ax.set_title("Binary Anthro Confusion Matrix (BirdNET)")
+    plt.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+    print(f"  Confusion matrix saved to {output_path}")
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +234,10 @@ def main():
     classifier = train(classifier, train_embs, train_labels, device)
 
     print("\nEvaluating on test set...")
-    auc = evaluate(classifier, test_embs, test_labels, device)
+    auc, cm = evaluate(classifier, test_embs, test_labels, device)
+
+    figs_path = RESULTS_PATH.parent / "figs"
+    plot_confusion_matrix(cm, figs_path / "confusion_matrix_binary_anthro_birdnet.png")
 
     print("\nSaving classifier bundle...")
     save_classifier_bundle(
