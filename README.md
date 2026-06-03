@@ -28,6 +28,22 @@ pixi install
 
 ## Data Setup
 
+Download the raw data from Zenodo (pos-only clips, no negatives):
+
+```bash
+wget https://zenodo.org/record/20534256/files/data.zip
+# or
+curl -L https://zenodo.org/record/20534256/files/data.zip -o data.zip
+```
+
+DOI: [10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256)
+
+Unzip into the workspace root:
+
+```bash
+unzip data.zip
+```
+
 ### 1. Input structure
 
 Place raw 3-second `.wav` clips in `pos/` for each species:
@@ -107,7 +123,7 @@ pixi run python scripts/train_binary_anthro_birdnet.py
 
 ![Binary anthropogenic confusion matrix](figs/confusion_matrix_binary_anthro_birdnet.png)
 
-Trained classifier bundles (weights + label encoder) are saved to `models/`.
+Trained classifier bundles (weights + label encoder) are saved to `results/classifiers/`.
 
 ## Citation
 
