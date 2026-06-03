@@ -1,122 +1,113 @@
 # Non-Avian ML Audio Classification
 
-## Overview
+Evaluates frozen pretrained audio embeddings (BirdNET, Perch, ResNet18, MobileNetV2, VGG11) for classifying non-avian wildlife and environmental sounds. Trains lightweight MLP classifier heads across varying training set sizes to produce learning curves, then builds production-ready multiclass and binary classifiers using BirdNET embeddings.
 
-A machine learning framework for comparing audio classification models across different training set sizes. Evaluates performance using frozen pretrained embeddings from five models on binary classification tasks (e.g., coyote presence/absence).
+## Experiment Overview
 
-**Workflow:** Extract frozen embeddings → Train MLP classifier head → Evaluate on fixed test set
+**Learning curve experiment** — For each species × model combination, extract frozen embeddings and train/evaluate an MLP head across multiple training sizes (10–160 samples/class) with 10 random seeds and 5-fold CV. Measures how quickly each embedding generalizes with limited data.
+
+**Multiclass BirdNET classifier** — Single MLP trained on all species simultaneously using all available data. Outputs a per-species probability.
+
+**Binary anthropogenic classifier** — BirdNET-based binary model distinguishing anthropogenic sounds (engines, traffic, guns, etc.) from natural sounds (frogs, wind, water, etc.).
 
 ## Models
 
-| Model | Embedding Dim | Pretrained On | Audio Input |
-|-------|--------------|---------------|-------------|
-| **BirdNET** | 6522-D (logits) | Bird species (TFLite) | 3s @ 48kHz |
-| **Perch** | 1280-D | Bird vocalizations | 5s @ 32kHz |
-| **ResNet18** | 512-D | ImageNet | Mel-spectrogram |
-| **MobileNetV2** | 1280-D | ImageNet | Mel-spectrogram |
-| **VGG11** | 4096-D | ImageNet | Mel-spectrogram |
-
-## Usage
-
-### Configuration
-
-Edit `src/config.yaml`:
-
-```yaml
-experiments:
-- name: all_models_test
-  models: [birdnet, perch, resnet, mobilenet, vgg]
-  species: [coyote, bullfrog]
-  training_sizes: [10, 20, 40, 60, 80, 100, 120]  # Samples per class
-  n_folds: 5                              # K-fold CV folds
-  n_epochs: 20                            # Training epochs 
-  test_size_per_class: 50                 # Fixed test set size
-  batch_size: 32                          # Batch size for training
-  random_seeds: [1,2,3,4,5,6,7,8,9,10]   # Multiple runs for statistics
-  kfold_seed: 1                           # Fixed for reproducibility
-  data_path: /workspaces/non-avian-ml/data
-  results_path: /workspaces/non-avian-ml/results
-  datatype: data                          # "data" or "data_5s"
-```
-
-**Key Parameters:**
-- `training_sizes`: Sample sizes per class to evaluate (creates learning curves)
-- `n_folds`: Number of cross-validation folds (5 is standard)
-- `n_epochs`: Training epochs for MLP classifier (20 typical for convergence)
-- `batch_size`: Training batch size (32 is standard, reduce if memory limited)
-- `random_seeds`: Multiple runs with different training samples (10 recommended for publication)
-
-### Run Experiment
-
-```bash
-cd /workspaces/non-avian-ml
-pixi run python src/main.py
-```
-
-### Results
-
-![comparison_curves](figs/species_comparison.png)
-Fig 1. Current performance of species classes by training size for 5 model architectures. 
-
-**CSV Output (`experiment_results.csv`):**
-
-| Column | Description |
-|--------|-------------|
-| `model`, `species`, `training_size` | Experiment parameters |
-| `n_folds`, `n_epochs`, `batch_size`, `test_size_per_class` | Configuration used |
-| `cv_auc_mean`, `cv_auc_std`, `cv_auc_ci_95`, `cv_auc_n` | Cross-validation statistics |
-| `test_auc_mean`, `test_auc_std`, `test_auc_ci_95`, `test_auc_n` | Test set statistics |
-
-- **`*_mean`**: Average performance across random seeds
-- **`*_std`**: Standard deviation (measures variability)
-- **`*_ci_95`**: 95% confidence interval (±CI around mean)
-- **`*_n`**: Number of runs aggregated
-
-**Plot (`experiment_results_plot.png`):**
-- Learning curves showing test AUC vs. training size
-- Error bars represent 95% confidence intervals
-- Separate subplot per species
-
-# Current Performance
-Class specific AUC-RUC is measured on the diagonal, showing high performance on all classes except Engine and Human vocal (currently due to low sample size). Limited confusion between frog species due to sampling. 
-
-![Confusion Matrix](figs/summary_heatmap_f1_score.png)
-
-## Data Structure
-
-```
-data/
-└── {species}/
-    ├── data/              # 3s clips for BirdNET, CNNs
-    │   ├── pos/*.wav
-    │   └── neg/*.wav
-    └── data_5s/           # 5s clips for Perch
-        ├── pos/*.wav
-        └── neg/*.wav
-```
-
-**Minimum files per class:** 150+ (50 test + 100 train + buffer)
-
-## Key Features
-
-- **Fixed test set:** Identical 100 samples (50 pos/neg) for all experiments
-- **Frozen embeddings:** Pretrained models used as feature extractors
-- **Stratified K-fold CV:** Robust within-training evaluation
-- **Statistical rigor:** 95% confidence intervals from multiple runs
-- **Fully reproducible:** Deterministic splits with fixed seeds
+| Model | Embedding Dim | Input |
+|-------|--------------|-------|
+| BirdNET 2.4 | 6522-D | 3s @ 48kHz |
+| Perch 8 | 1280-D | 5s @ 32kHz |
+| ResNet18 | 512-D | Mel-spectrogram |
+| MobileNetV2 | 1280-D | Mel-spectrogram |
+| VGG11 | 4096-D | Mel-spectrogram |
 
 ## Installation
 
 ```bash
-# Install dependencies via pixi
 pixi install
-
-# Or manually install required packages:
-# PyTorch, torchaudio, torchvision
-# TensorFlow, ai-edge-litert, tensorflow-hub
-# scikit-learn, librosa, soundfile
-# pandas, matplotlib, numpy
 ```
+
+## Data Setup
+
+### 1. Input structure
+
+Place raw 3-second `.wav` clips in `pos/` for each species:
+
+```
+data/
+└── {species}/
+    └── data/
+        └── pos/*.wav    # 3s clips @ species native sample rate
+```
+
+### 2. Build 5s clips (for Perch)
+
+Pads each 3s clip with 1s silence on each side:
+
+```bash
+pixi run python scripts/build_data_5s.py
+```
+
+### 3. Build negatives
+
+Balances each species by sampling negatives from other species' positives (1:1 ratio):
+
+```bash
+pixi run python scripts/build_negatives.py             # for data/
+pixi run python scripts/build_negatives.py --datatype data_5s
+```
+
+After these steps, each species folder should contain:
+
+```
+data/
+└── {species}/
+    ├── data/
+    │   ├── pos/*.wav
+    │   └── neg/*.wav
+    └── data_5s/
+        ├── pos/*.wav
+        └── neg/*.wav
+```
+
+## Running the Experiment
+
+### Learning curve experiment
+
+Configure `src/config.yaml`, then:
+
+```bash
+pixi run python main.py
+```
+
+Results are saved to `results/results_{species}.csv`. Generate plots:
+
+```bash
+pixi run python scripts/training_size_plots.py
+```
+
+![Learning curves by species group](figs/_frog_comparison.png)
+
+### Multiclass BirdNET classifier
+
+Trains a single MLP across all species using `src/config-final-classifiers.yaml`:
+
+```bash
+pixi run python scripts/train_multiclass_birdnet.py
+```
+
+![Multiclass confusion matrix](figs/confusion_matrix_multiclass_birdnet.png)
+
+### Binary anthropogenic classifier
+
+Classifies anthropogenic vs. natural sounds using all available data:
+
+```bash
+pixi run python scripts/train_binary_anthro_birdnet.py
+```
+
+![Binary anthropogenic confusion matrix](figs/confusion_matrix_binary_anthro_birdnet.png)
+
+Trained classifier bundles (weights + label encoder) are saved to `models/`.
 
 ## Citation
 
@@ -126,7 +117,5 @@ pixi install
   author = {Van Scoyoc, Amy},
   year = {2025},
   url = {https://github.com/avanscoyoc/non-avian-ml}
-}
-```
 }
 ```

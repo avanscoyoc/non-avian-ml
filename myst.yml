@@ -11,7 +11,7 @@ project:
   exports:
     - format: pdf
       template: lapreprint
-      output: docs/non-avian-ml.pdf
+      output: docs/manuscript.pdf
       article: docs/myst.md
 
 site:
