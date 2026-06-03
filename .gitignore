@@ -4,6 +4,7 @@ __pycache__
 __MACOSX
 .pixi
 .devcontainer/.env
+_build
 data
 test_audio
 results

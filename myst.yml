@@ -1,0 +1,17 @@
+version: 1
+
+project:
+  title: Non-Avian Acoustic Classifier Development
+  date: 2026-06-03
+  authors:
+    - name: Amy Van Scoyoc
+      email: avanscoyoc@berkeley.edu
+      affiliations:
+        - UC Berkeley
+  exports:
+    - format: pdf
+      output: docs/non-avian-ml.pdf
+      article: docs/myst.md
+
+site:
+  title: Non-Avian Acoustic Classifier Development

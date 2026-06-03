@@ -20,13 +20,18 @@ seaborn = "*"
 pyyaml = "*"
 tqdm = "*"
 pip = "*"
+nodejs = ">=20"
+
+[tasks]
+myst-install = "npm install -g mystmd@1.9.1"
+myst-build = { cmd = "myst build --pdf", depends-on = ["myst-install"] }
+myst-start = { cmd = "myst start", depends-on = ["myst-install"] }
 
 [pypi-dependencies]
-# Only packages not available in conda-forge
 tensorflow = ">=2.15.0"
 tensorflow_hub = "*"
 timm = "*"
 birdnetlib = "*"
 ai-edge-litert = "*"
 soundfile = "*"
-setuptools = "<81"  # Pin to avoid pkg_resources deprecation warning
+setuptools = "<81"
