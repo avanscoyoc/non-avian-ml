@@ -176,22 +176,54 @@ def evaluate(classifier, embeddings, labels, device):
 
 
 def plot_confusion_matrix(cm: np.ndarray, output_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(5, 4))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        xticklabels=["natural", "anthropogenic"],
-        yticklabels=["natural", "anthropogenic"],
-        ax=ax,
-    )
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("True")
-    ax.set_title("Binary Anthro Confusion Matrix (BirdNET)")
+    class_names = ["Natural", "Anthropogenic"]
+
+    # Row-normalize to recall percentages; keep raw counts for annotations
+    row_sums = cm.sum(axis=1, keepdims=True).clip(min=1)
+    cm_pct = cm / row_sums * 100
+
+    annot = np.empty(cm.shape, dtype=object)
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            annot[i, j] = f"{cm_pct[i, j]:.1f}%\n(n={cm[i, j]})"
+
+    fig, ax = plt.subplots(figsize=(4.5, 3.8))
+
+    with plt.rc_context({
+        "font.family": "sans-serif",
+        "font.size": 10,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    }):
+        sns.heatmap(
+            cm_pct,
+            annot=annot,
+            fmt="",
+            cmap="Blues",
+            vmin=0,
+            vmax=100,
+            xticklabels=class_names,
+            yticklabels=class_names,
+            linewidths=0.4,
+            linecolor="#e0e0e0",
+            cbar_kws={"label": "Recall (%)", "shrink": 0.85, "pad": 0.02},
+            ax=ax,
+            annot_kws={"size": 10, "linespacing": 1.4},
+        )
+
+        ax.set_xlabel("Predicted", fontsize=10, labelpad=6)
+        ax.set_ylabel("True", fontsize=10, labelpad=6)
+        ax.tick_params(axis="x", labelsize=9.5, length=0, rotation=0)
+        ax.tick_params(axis="y", labelsize=9.5, length=0, rotation=0)
+
+        cbar = ax.collections[0].colorbar
+        cbar.ax.tick_params(labelsize=8.5)
+        cbar.set_label("Recall (%)", fontsize=9)
+
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
     print(f"  Confusion matrix saved to {output_path}")
 

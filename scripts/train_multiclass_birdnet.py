@@ -193,25 +193,66 @@ def evaluate_classifier(
 # ---------------------------------------------------------------------------
 
 def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(max(8, len(label_names)), max(6, len(label_names) - 1)))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        xticklabels=label_names,
-        yticklabels=label_names,
-        ax=ax,
-    )
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("True")
-    ax.set_title("Multiclass Confusion Matrix (BirdNET)")
-    plt.xticks(rotation=45, ha="right")
+    # Row-normalize to recall percentages; keep raw counts for annotations
+    row_sums = cm.sum(axis=1, keepdims=True).clip(min=1)
+    cm_pct = cm / row_sums * 100
+
+    # Format species names: "american_bullfrog" -> "American bullfrog"
+    display_names = [name.replace("_", " ").capitalize() for name in label_names]
+
+    # Build annotation strings: "82.1%\n(n=41)"
+    annot = np.empty(cm.shape, dtype=object)
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            annot[i, j] = f"{cm_pct[i, j]:.1f}%\n(n={cm[i, j]})"
+
+    n = len(label_names)
+    fig, ax = plt.subplots(figsize=(max(9, n * 0.9), max(7, n * 0.75)))
+
+    with plt.rc_context({
+        "font.family": "sans-serif",
+        "font.size": 9,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    }):
+        sns.heatmap(
+            cm_pct,
+            annot=annot,
+            fmt="",
+            cmap="Blues",
+            vmin=0,
+            vmax=100,
+            xticklabels=display_names,
+            yticklabels=display_names,
+            linewidths=0.4,
+            linecolor="#e0e0e0",
+            cbar_kws={"label": "Recall (%)", "shrink": 0.6, "pad": 0.02},
+            ax=ax,
+            annot_kws={"size": 7.5, "linespacing": 1.3},
+        )
+
+        ax.set_xlabel("Predicted", fontsize=10, labelpad=6)
+        ax.set_ylabel("True", fontsize=10, labelpad=6)
+        ax.tick_params(axis="x", labelsize=8.5, length=0)
+        ax.tick_params(axis="y", labelsize=8.5, length=0, rotation=0)
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+        # Style the colorbar
+        cbar = ax.collections[0].colorbar
+        cbar.ax.tick_params(labelsize=8)
+        cbar.set_label("Recall (%)", fontsize=9)
+
     plt.tight_layout()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150)
+    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
     print(f"  Confusion matrix saved to {output_path}")
+
+
+# Minimum test samples required to include a species in multiclass evaluation.
+# Classes below this threshold have too few samples for meaningful evaluation.
+MIN_TEST_SAMPLES = 20
 
 
 # ---------------------------------------------------------------------------
@@ -232,13 +273,24 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
+    # Filter species with insufficient test samples
+    excluded = [
+        sp for sp, sizes in config.species_sizes.items()
+        if sizes["test"] < MIN_TEST_SAMPLES
+    ]
+    if excluded:
+        print(f"\nExcluding {len(excluded)} species with < {MIN_TEST_SAMPLES} test samples:")
+        for sp in excluded:
+            print(f"  {sp} (test={config.species_sizes[sp]['test']})")
+    eligible_species = [sp for sp in config.species if sp not in excluded]
+
     # Use the first random seed from config (no multiple seeds needed here)
     seed = config.random_seeds[0] if config.random_seeds else 42
 
-    print(f"\nCollecting files for {len(config.species)} species (seed={seed})...")
+    print(f"\nCollecting files for {len(eligible_species)} species (seed={seed})...")
     train_files, train_labels, test_files, test_labels, label_names = collect_split(
         data_path=config.data_path,
-        species=config.species,
+        species=eligible_species,
         species_sizes=config.species_sizes,
         datatype=config.datatype,
         seed=seed,

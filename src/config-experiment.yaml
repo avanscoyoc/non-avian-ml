@@ -1,0 +1,38 @@
+experiments:
+- name: experiment
+  description: >
+    Exploratory experiment: sweeps multiple models and training sizes (10-160)
+    with 10 random seeds per species. Use this to compare model architectures
+    and assess sample-size effects and performance.
+  models:
+  - birdnet
+  - perch
+  - mobilenet
+  - resnet
+  - vgg
+  species:
+  - device_static
+  - pacific_chorus_frog
+  - woodhouses_toad
+  - field_cricket
+  - yellow_legged_frog
+  - american_bullfrog
+  - wind
+  - nutria
+  - generator
+  - traffic
+  - engine
+  - power_tools
+  - human_vocal
+  - coyote
+  training_sizes: [10, 20, 40, 80, 160]
+  n_folds: 5
+  n_epochs: 20
+  batch_size: 32
+  random_seeds: [1,2,3,4,5,6,7,8,9,10]
+  kfold_seed: 1
+  data_path: /workspaces/non-avian-ml/data
+  results_path: /workspaces/non-avian-ml/results
+  datatype: data
+  save_classifier: false
+  run_zeroshot: true

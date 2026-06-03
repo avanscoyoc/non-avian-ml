@@ -1,38 +1,38 @@
 experiments:
-- name: experiment
-  description: >
-    Exploratory experiment: sweeps multiple models and training sizes (10-160)
-    with 10 random seeds per species. Use this to compare model architectures
-    and assess sample-size effects and performance.
+- name: final_classifiers
+  description: "Production run: trained final BirdNET classifiers using all available data per species, single seed, and saves classifier bundles for use."
   models:
   - birdnet
-  - perch
-  - mobilenet
-  - resnet
-  - vgg
-  species:
-  - device_static
-  - pacific_chorus_frog
-  - woodhouses_toad
-  - field_cricket
-  - yellow_legged_frog
-  - american_bullfrog
-  - wind
-  - nutria
-  - generator
-  - traffic
-  - engine
-  - power_tools
-  - human_vocal
-  - coyote
-  training_sizes: [10, 20, 40, 80, 160]
+  species_sizes:
+    device_static:        {train: 1133, test: 283}
+    pacific_chorus_frog:  {train: 636,  test: 159}
+    woodhouses_toad:      {train: 511,  test: 127}
+    field_cricket:        {train: 484,  test: 121}
+    yellow_legged_frog:   {train: 349,  test: 87}
+    american_bullfrog:    {train: 337,  test: 84}
+    wind:                 {train: 407,  test: 101}
+    nutria:               {train: 196,  test: 49}
+    generator:            {train: 350,  test: 87}
+    traffic:              {train: 238,  test: 59}
+    engine:               {train: 136,  test: 34}
+    power_tools:          {train: 130,  test: 32}
+    human_vocal:          {train: 94,   test: 23}
+    coyote:               {train: 81,   test: 20}
+    metal_clanging:       {train: 48,   test: 12}
+    airplane:             {train: 42,   test: 10}
+    thunder:              {train: 17,   test: 4}
+    gun:                  {train: 20,   test: 4}
+    fireworks:            {train: 7,    test: 1}
+    dog:                  {train: 10,   test: 2}
+    water:                {train: 9,    test: 2}
+    human_non_vocal:      {train: 7,    test: 1}
   n_folds: 5
   n_epochs: 20
   batch_size: 32
-  random_seeds: [1,2,3,4,5,6,7,8,9,10]
+  random_seeds: [1]
   kfold_seed: 1
   data_path: /workspaces/non-avian-ml/data
   results_path: /workspaces/non-avian-ml/results
   datatype: data
-  save_classifier: false
-  run_zeroshot: true
+  save_classifier: true
+  run_zeroshot: false
