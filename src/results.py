@@ -140,7 +140,7 @@ def save_classifier_bundle(
     
     if model_name == "birdnet":
         # Copy BirdNET TFLite model
-        src_model = Path("/workspaces/non-avian-ml/model_birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
+        src_model = Path("/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
         dst_model = embedding_dir / "model.tflite"
         shutil.copy2(src_model, dst_model)
         
@@ -156,7 +156,7 @@ def save_classifier_bundle(
         
     elif model_name == "perch":
         # Copy Perch SavedModel directory
-        src_model_dir = Path("/workspaces/non-avian-ml/model_perch_8")
+        src_model_dir = Path("/workspaces/non-avian-ml/models/perch_8")
         for item in ["saved_model.pb", "variables", "assets"]:
             src_item = src_model_dir / item
             if src_item.exists():
