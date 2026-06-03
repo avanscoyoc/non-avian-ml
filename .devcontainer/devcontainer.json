@@ -7,7 +7,7 @@
   "mounts": [
     "source=${localWorkspaceFolderBasename}-pixi,target=${containerWorkspaceFolder}/.pixi,type=volume"
   ],
-  "postCreateCommand": "pixi install",
+  "postCreateCommand": "pixi install && pixi run myst-install",
   "customizations": {
     "vscode": {
       "extensions": [
