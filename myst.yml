@@ -10,6 +10,7 @@ project:
         - UC Berkeley
   exports:
     - format: pdf
+      template: lapreprint
       output: docs/non-avian-ml.pdf
       article: docs/myst.md
 
