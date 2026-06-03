@@ -191,12 +191,13 @@ def evaluate_classifier(
 # ---------------------------------------------------------------------------
 
 def main():
-    config_path = Path(__file__).parent / "config.yaml"
+    config_path = Path(__file__).parent.parent / "src" / "config.yaml"
     config = load_config(str(config_path))
 
     birdnet_model_path = str(
         Path(__file__).parent.parent
-        / "model_birdnet_2.4"
+        / "models"
+        / "birdnet_2.4"
         / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
     )
 

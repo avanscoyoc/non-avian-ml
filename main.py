@@ -146,7 +146,9 @@ def main():
             df = save_results(all_runs.to_dict('records'), output_file)
             print(f"Results saved: {output_file}")
 
-            plot_file = output_file.replace(".csv", "_plot.png")
+            figs_dir = Path(config.results_path).parent / "figs"
+            figs_dir.mkdir(parents=True, exist_ok=True)
+            plot_file = str(figs_dir / f"results_{species}_plot.png")
             plot_species_models(df, plot_file)
             print(f"Plot saved: {plot_file}")
 

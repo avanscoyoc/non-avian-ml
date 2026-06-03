@@ -233,11 +233,11 @@ def load_model(model_name: str):
         return model.to(device), device
 
     elif model_name == "birdnet":
-        model_path = "/workspaces/non-avian-ml/model_birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
+        model_path = "/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
         return BirdNETModel(model_path), device
 
     elif model_name == "perch":
-        model_path = "/workspaces/non-avian-ml/model_perch_8"
+        model_path = "/workspaces/non-avian-ml/models/perch_8"
         return PerchModel(model_path), device
 
     else:

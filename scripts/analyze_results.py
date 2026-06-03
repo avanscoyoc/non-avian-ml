@@ -84,7 +84,7 @@ def compute_confusion_matrices(df, threshold=0.5):
     return pd.DataFrame(results)
 
 
-def plot_confusion_matrices(df, output_dir='confusion_matrices', threshold=0.5):
+def plot_confusion_matrices(df, output_dir='figs', threshold=0.5):
     """Generate confusion matrix plots for each classifier-species pair."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
@@ -120,7 +120,7 @@ def plot_confusion_matrices(df, output_dir='confusion_matrices', threshold=0.5):
             print(f"  Saved: {filename}")
 
 
-def plot_probability_distributions(df, output_dir='confusion_matrices'):
+def plot_probability_distributions(df, output_dir='figs'):
     """Plot probability distributions for each classifier-species pair."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
@@ -160,7 +160,7 @@ def plot_probability_distributions(df, output_dir='confusion_matrices'):
             
             print(f"  Saved: {filename}")
 
-def plot_summary_heatmap(metrics_df, metric='f1_score', output_dir='confusion_matrices'):
+def plot_summary_heatmap(metrics_df, metric='f1_score', output_dir='figs'):
     """Create a single heatmap showing chosen metric for all classifier-species pairs."""
     output_dir = Path(output_dir)
     output_dir.mkdir(exist_ok=True)
@@ -252,7 +252,7 @@ def main():
     print()
     
     print("=" * 80)
-    print(f"Analysis complete! Check 'confusion_matrices/' directory for plots.")
+    print(f"Analysis complete! Check 'figs/' directory for plots.")
     print("=" * 80)
 
 

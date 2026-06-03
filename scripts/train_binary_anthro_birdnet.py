@@ -59,7 +59,7 @@ NATURAL = [
 ]
 
 DATA_PATH   = Path("/workspaces/non-avian-ml/data")
-MODEL_PATH  = Path("/workspaces/non-avian-ml/model_birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
+MODEL_PATH  = Path("/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
 RESULTS_PATH = Path("/workspaces/non-avian-ml/results")
 DATATYPE    = "data"
 SEED        = 1
