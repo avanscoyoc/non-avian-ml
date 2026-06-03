@@ -5,7 +5,7 @@
 A classifier bundle is a self-contained deployment package that includes everything needed to run inference on audio files for a specific species using a trained model.
 
 ```
-pixi run python load_classifier_example.py results/classifiers/woodhouses_toad_birdnet_120/ test_audio/woodhousestoad_26sec.wav
+pixi run python scripts/load_classifier_example.py results/classifiers/woodhouses_toad_birdnet_511/ test_audio/woodhousestoad_26sec.wav
 ```
 ## Bundle Structure
 
@@ -83,7 +83,7 @@ To save classifier bundles during training:
 
 2. Run the experiment:
    ```bash
-   pixi run python src/main.py
+   pixi run python main.py
    ```
 
 3. Bundles will be saved to:
@@ -96,10 +96,10 @@ To save classifier bundles during training:
 ### Example Usage
 
 ```python
-from load_classifier_example import load_classifier_bundle, predict
+from scripts.load_classifier_example import load_classifier_bundle, predict
 
 # Load bundle
-bundle = load_classifier_bundle("results/classifiers/bullfrog_birdnet_100/")
+bundle = load_classifier_bundle("results/classifiers/woodhouses_toad_birdnet_511/")
 
 # Run inference
 result = predict(bundle, "mystery_audio.wav")
@@ -112,9 +112,9 @@ print(f"Confidence: {result['confidence']:.2%}")
 ### Command Line
 
 ```bash
-python load_classifier_example.py \
-    results/classifiers/bullfrog_birdnet_100/ \
-    test_audio.wav
+python scripts/load_classifier_example.py \
+    results/classifiers/woodhouses_toad_birdnet_511/ \
+    test_audio/woodhousestoad_26sec.wav
 ```
 
 ## Inference Pipeline

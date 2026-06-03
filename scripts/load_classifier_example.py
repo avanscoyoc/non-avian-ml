@@ -3,10 +3,10 @@
 Example script showing how to load and use a saved classifier bundle for inference.
 
 Usage:
-    python load_classifier_example.py <bundle_path> <audio_file>
+    python scripts/load_classifier_example.py <bundle_path> <audio_file>
 
 Example:
-    python load_classifier_example.py results/classifiers/bullfrog_birdnet_100/ test_audio.wav
+    python scripts/load_classifier_example.py results/classifiers/woodhouses_toad_birdnet_511/ test_audio/woodhousestoad_26sec.wav
 """
 
 import json
