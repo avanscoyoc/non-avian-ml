@@ -3,20 +3,22 @@
 Batch inference script for running classifiers on multiple audio files.
 
 Usage:
-    python batch_inference.py <bundle_path_1> [bundle_path_2 ...] --output results.csv
+    python scripts/batch_inference.py <bundle_path_1> [bundle_path_2 ...] --output results.csv
 
 Example:
-    python batch_inference.py \
+    python scripts/batch_inference.py \
         results/classifiers/woodhouses_toad_birdnet_120/ \
         results/classifiers/bullfrog_birdnet_120/ \
         --output inference_results.csv
 """
 
 import json
-import torch
-import torch.nn as nn
-from pathlib import Path
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import torch
 import csv
 import argparse
 from tqdm import tqdm

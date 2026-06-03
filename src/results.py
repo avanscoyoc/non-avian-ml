@@ -113,9 +113,18 @@ def save_classifier_bundle(
     test_auc,
     n_epochs,
     results_path,
+    bundle_name=None,
+    labels=None,
 ):
-    """Save complete classifier bundle for deployment."""
-    bundle_name = f"{species}_{model_name}_{training_size}"
+    """Save complete classifier bundle for deployment.
+
+    bundle_name: override the auto-generated directory name
+                 (defaults to "{species}_{model_name}_{training_size}")
+    labels:      override labels.json content; if None the default binary
+                 {"0": "absent", "1": "present", "species": species} is used
+    """
+    if bundle_name is None:
+        bundle_name = f"{species}_{model_name}_{training_size}"
     bundle_dir = Path(results_path) / "classifiers" / bundle_name
     bundle_dir.mkdir(parents=True, exist_ok=True)
     
@@ -210,11 +219,12 @@ def save_classifier_bundle(
         json.dump(preprocessing, f, indent=2)
     
     # 5. Save labels.json
-    labels = {
-        "0": "absent",
-        "1": "present",
-        "species": species,
-    }
+    if labels is None:
+        labels = {
+            "0": "absent",
+            "1": "present",
+            "species": species,
+        }
     with open(bundle_dir / "labels.json", "w") as f:
         json.dump(labels, f, indent=2)
     
