@@ -1,15 +1,10 @@
-
-# pixi environments
-.pixi
-__pycache__ 
+__pycache__
+.ipynb_checkpoints
+.DS_Store
 __MACOSX
+.pixi
+.devcontainer/.env
 data
 test_audio
 results
-results_plot_runs
 tmp
-* data
-.devcontainer/.env
-confusion_matrices
-.DS_Store
-.ipynb_checkpoints  
