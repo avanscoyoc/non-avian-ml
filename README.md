@@ -101,11 +101,7 @@ Results are saved to `results/results_{species}.csv`. Generate plots:
 pixi run python scripts/training_size_plots.py
 ```
 
-![Learning curves for pulsed biological sounds](figs/pulsed.png)
-
 ![Learning curves for broadband abiotic sounds](figs/broadband.png)
-
-![Learning curves for variable sounds](figs/variable.png)
 
 ### Multiclass BirdNET classifier
 
