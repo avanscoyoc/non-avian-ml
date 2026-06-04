@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     texlive-latex-recommended \
     texlive-fonts-extra \
     texlive-bibtex-extra \
+    texlive-science \
     biber \
     latexmk \
     && locale-gen en_US.UTF-8 \

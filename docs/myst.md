@@ -5,9 +5,16 @@ authors:
   - name: Amy Van Scoyoc, PhD
     email: avanscoyoc@berkeley.edu
     orcid: 0000-0001-8638-935X
+    website: https://github.com/avanscoyoc/non-avian-ml
 abstract: |
   The rapid proliferation of deep learning models has enabled researchers to analyze large volumes of passively collected acoustic data for wildlife monitoring. While robust models exist for commonly recorded species with abundant labeled training data (e.g., bird species), rare or data-deficient species often lack sufficient high-quality reference audio recordings for effective classification of field data. Here, I labeled >6500 audio clips from raw data and used few-shot transfer learning to tune and develop binary classifiers for 23 non-avian sound classes. To ensure robust model classification, I benchmarked performance across five model architectures and training sizes and highlight best practices on the amount of audio to use to achieve optimal model performance. Then, I trained a multi-class model with several anthropogenic sound classes to enhance the ability to detect anthropogenic sounds with greater accuracy. Finally, after reviewing more than 10,000 hours of audio with a team of fourteen annotators I surfaced the need for a rapid, inline annotation tooling. As an additional deliverable, our team developed Jupyter Bioacoustics to support data labeling and model training going forward.
+data_availability: |
+  Labeled audio clips are archived on Zenodo at [doi:10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256).
 ---
+
+```{raw} latex
+\captionsetup{font=scriptsize, skip=8pt}
+```
 
 ## Section 1: Introduction and Project Scope
 
@@ -57,7 +64,9 @@ For all five architectures, I used the pre-trained backbone as a frozen feature 
 
 ### 3.2.2 Sound classes and training libraries
 We used stratified 5-fold cross-validation on 13 classes, with balanced positive and negative training sizes from 10 to 160 samples (Table 1). Audio clips were standardized to 3 seconds for all models, with an additional silent padding up to 5 seconds specifically for Perch. The negative training set for a given class consisted of positive samples evenly drawn from all other sound classes. All trained classifiers at each combination of training size and model were evaluated on a fixed, held-out test set of 50 positive and 50 negative clips for that specific sound class. The primary performance metric was the area under the receiver operating characteristic curve (AUC-ROC), which summarizes the trade-off between true and false positive rates across all possible decision thresholds. AUC-ROC of 1.0 indicates perfect ranking of positive over negative examples; 0.5 indicates random performance.
-**Table 1.** Sound classes and library composition for the benchmarking experiment.
+
+:::{table} Sound classes and library composition for the benchmarking experiment.
+:label: tbl-sound-classes
 
 | Sound class | Positive clips | Negative clips | Max training size | Audio clip origin |
 |---|---|---|---|---|
@@ -75,11 +84,13 @@ We used stratified 5-fold cross-validation on 13 classes, with balanced positive
 | Power tools | 162 | 162 | 80 | Margin sampling, opportunistic |
 | Human vocal | 117 | 117 | 40 | Margin sampling, opportunistic |
 | Coyote | 101 | 101 | 40 | Margin sampling, Mojave |
+:::
 
 
 Nine additional classes (metal, airplane, thunder, gun, fireworks, dog, water, human non-vocal, branches) had insufficient labeled data to be included in the benchmarking experiment (≤60 clips per polarity) and were excluded from the architectural sweep. These classes were either trained on later using the architecture indicated for acoustically similar classes, or flagged as data-deficient.
 
-**Table 2.** Additional nine sound classes not included in the experiment.
+:::{table} Additional nine sound classes not included in the experiment.
+:label: tbl-additional-classes
 
 | Sound class | Positive clips | Negative clips | Audio clip origin |
 |---|---|---|---|
@@ -92,6 +103,7 @@ Nine additional classes (metal, airplane, thunder, gun, fireworks, dog, water, h
 | Water | 11 | 11 | ARU location info, stream likely; opportunistic |
 | Human non-vocal | 8 | 8 | Margin sampling, all CDFW sites |
 | Branches | 3 | 3 | Opportunistic |
+:::
 
 
 
@@ -99,24 +111,24 @@ Nine additional classes (metal, airplane, thunder, gun, fireworks, dog, water, h
 
 ### 4.1 Results
 
-Results indicated that bioacoustics-pretrained models (BirdNET, Perch) excel for biological sounds, while general architectures are comparable for anthropogenic noise. Performance generally saturates near 80 samples for BirdNET but is outperformed by Perch beyond 160. Cross-class analysis shows how rapidly each architecture's performance saturates with training size. The best architectures were retrained on full libraries. High performance was achieved for abiotic (wind, static) and biological (frogs, crickets) classes. Data-deficient classes (thunder, dog) remain preliminary.
+Results indicated that bioacoustics-pretrained models (BirdNET, Perch) excel for biological sounds, while general architectures are comparable for abiotic noise. Performance generally saturates near 80 samples for BirdNET but is outperformed by Perch with 160 samples. Cross-class analysis shows how rapidly each architecture's performance saturates with training size. The best architectures were retrained on full libraries. High performance was achieved for broadband abiotic (wind, static) and pulsed biological (frogs, crickets) classes.
 
 :::{figure} ../figs/pulsed.png
 :label: fig-pulsed
 :align: center
-AUC-ROC by training size for pulsed biological sound classes (American bullfrog, Pacific chorus frog, Woodhouse's toad, foothill yellow-legged frog, field cricket). Bioacoustics-pretrained models show strong performance even at low training sizes for these chorusing taxa.
+AUC-ROC by training size for pulsed biological sound classes (American bullfrog, Pacific chorus frog, Woodhouse's toad, foothill yellow-legged frog, field cricket).
 :::
 
 :::{figure} ../figs/broadband.png
 :label: fig-broadband
 :align: center
-AUC-ROC by training size for broadband abiotic sound classes (wind, device static). General-purpose architectures perform comparably to bioacoustics-pretrained models, with all architectures approaching ceiling at 80 samples.
+AUC-ROC by training size for broadband abiotic sound classes (engine, generator, traffic, power tools, wind, device static). 
 :::
 
 :::{figure} ../figs/variable.png
 :label: fig-variable
 :align: center
-AUC-ROC by training size for variable sound classes (coyote, nutria, engine, generator, traffic, power tools, human vocal). General-purpose architectures (ResNet-18) are competitive with bioacoustics-pretrained models for anthropogenic and non-chorusing biological sounds.
+AUC-ROC by training size for tonally variable sound classes (coyote, nutria, human vocal). 
 :::
 
 ### 4.2 Human Noise Index
@@ -140,4 +152,8 @@ Future work should prioritize labeling for data-deficient classes and investigat
 ## Section 7: Deliverables
 
 Provided to CDFW: 23 classifiers, the Human Noise Index, labeled libraries, and benchmarking data. Jupyter Bioacoustics is released as an open-source extension on GitHub.
+
++++ {"part": "competing_interests"}
+The author declares no competing interests.
++++
 

@@ -10,7 +10,7 @@ project:
         - UC Berkeley
   exports:
     - format: pdf
-      template: lapreprint
+      template: ./docs/lapreprint-custom
       output: docs/manuscript.pdf
       article: docs/myst.md
 
