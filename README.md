@@ -123,7 +123,7 @@ pixi run python scripts/train_binary_anthro_birdnet.py
 
 ![Binary anthropogenic confusion matrix](figs/confusion_matrix_binary_anthro_birdnet.png)
 
-Trained classifier bundles (weights + label encoder) are saved to `results/classifiers/`.
+Trained classifier bundles (weights + label encoder) are saved to `results/classifiers/`. Each bundle contains the classifier weights, label encoder, preprocessing config, and embedding model. See `scripts/load_classifier_example.py` for a usage example.
 
 ## Citation
 
