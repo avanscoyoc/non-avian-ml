@@ -99,62 +99,24 @@ Nine additional classes (metal, airplane, thunder, gun, fireworks, dog, water, h
 
 ### 4.1 Results
 
-:::{figure} ../figs/species_comparison.png
-:label: fig-species-comparison
-:align: center
-AUC-ROC performance across all 23 sound classes and five model architectures. Each panel shows performance curves as a function of training size. Bioacoustics-pretrained models (BirdNET, Perch) generally outperform general-purpose architectures for biological sounds.
-:::
-
 Results indicated that bioacoustics-pretrained models (BirdNET, Perch) excel for biological sounds, while general architectures are comparable for anthropogenic noise. Performance generally saturates near 80 samples for BirdNET but is outperformed by Perch beyond 160. Cross-class analysis shows how rapidly each architecture's performance saturates with training size. The best architectures were retrained on full libraries. High performance was achieved for abiotic (wind, static) and biological (frogs, crickets) classes. Data-deficient classes (thunder, dog) remain preliminary.
 
-:::{figure} ../figs/_frog_comparison.png
-:label: fig-frog-comparison
+:::{figure} ../figs/pulsed.png
+:label: fig-pulsed
 :align: center
-AUC-ROC by training size for frog and toad classes (American bullfrog, Pacific chorus frog, Woodhouse's toad, foothill yellow-legged frog). Bioacoustics-pretrained models show strong performance even at low training sizes for these chorusing taxa.
+AUC-ROC by training size for pulsed biological sound classes (American bullfrog, Pacific chorus frog, Woodhouse's toad, foothill yellow-legged frog, field cricket). Bioacoustics-pretrained models show strong performance even at low training sizes for these chorusing taxa.
 :::
 
-:::{figure} ../figs/_nonfrog_comparison.png
-:label: fig-nonfrog-comparison
+:::{figure} ../figs/broadband.png
+:label: fig-broadband
 :align: center
-AUC-ROC by training size for non-frog biological and abiotic classes (coyote, field cricket, wind, device static, nutria). Architecture performance patterns differ notably from frog classes, with general-purpose models more competitive for abiotic sounds.
+AUC-ROC by training size for broadband abiotic sound classes (wind, device static). General-purpose architectures perform comparably to bioacoustics-pretrained models, with all architectures approaching ceiling at 80 samples.
 :::
 
-:::{figure} ../figs/_anthro_comparison.png
-:label: fig-anthro-comparison
+:::{figure} ../figs/variable.png
+:label: fig-variable
 :align: center
-AUC-ROC by training size for anthropogenic sound classes (engine, generator, traffic, power tools, human vocal). General-purpose architectures (ResNet-18) are competitive with bioacoustics-pretrained models for these non-biological sounds.
-:::
-
-#### Representative individual-species results
-
-:::{figure} ../figs/results_nutria_plot.png
-:label: fig-nutria
-:align: center
-Benchmarking curves for nutria. With 245 positive clips and a distinctive low-frequency call, all architectures reached high AUC-ROC, with Perch leading at larger training sizes.
-:::
-
-:::{figure} ../figs/results_yellow_legged_frog_plot.png
-:label: fig-ylf
-:align: center
-Benchmarking curves for foothill yellow-legged frog. Performance scales steeply with training size; Perch and BirdNET outperform general architectures reflecting the biological pre-training advantage for this chorusing species.
-:::
-
-:::{figure} ../figs/results_coyote_plot.png
-:label: fig-coyote
-:align: center
-Benchmarking curves for coyote. With only 101 positive clips (max training size 40), BirdNET achieves the highest performance, likely benefiting from pre-training on mammal vocalizations.
-:::
-
-:::{figure} ../figs/results_device_static_plot.png
-:label: fig-device-static
-:align: center
-Benchmarking curves for device static. As an abiotic signal, device static saturates quickly across all architectures; ResNet-18 and BirdNET reach near-perfect AUC-ROC by 40 samples.
-:::
-
-:::{figure} ../figs/results_wind_plot.png
-:label: fig-wind
-:align: center
-Benchmarking curves for wind. Wind is a broadband continuous noise; general-purpose architectures perform comparably to bioacoustics-pretrained models, with all architectures approaching ceiling at 80 samples.
+AUC-ROC by training size for variable sound classes (coyote, nutria, engine, generator, traffic, power tools, human vocal). General-purpose architectures (ResNet-18) are competitive with bioacoustics-pretrained models for anthropogenic and non-chorusing biological sounds.
 :::
 
 ### 4.2 Human Noise Index
