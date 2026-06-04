@@ -1,9 +1,9 @@
 from pathlib import Path
 import torch
 import numpy as np
-from model_loader import load_model
-from trainer import cleanup_model
-from results import save_run_result
+from src.model_loader import load_model
+from src.trainer import cleanup_model
+from src.results import save_run_result
 
 
 def evaluate_zero_shot(species, model_name, test_files, test_labels, config):
