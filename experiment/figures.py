@@ -268,7 +268,7 @@ def fig_tsne(perplexity: int = 30, seed: int = 0):
             print(f"  Running t-SNE for {group} ({embs.shape})...")
             coords = TSNE(
                 n_components=2, perplexity=perplexity,
-                random_state=seed, n_iter=1000,
+                random_state=seed, max_iter=1000,
             ).fit_transform(embs)
 
             for i, cls in enumerate(names):
