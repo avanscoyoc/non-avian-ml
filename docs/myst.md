@@ -154,6 +154,10 @@ In the non-biotic group, power tools and generator formed distinct clusters, whi
 t-SNE projection of test-set embeddings (50 clips per class) for BirdNET (left column) and Perch (right column). Top row: anuran group; bottom row: non-biotic group. Each point is one audio clip; colours denote class; stars mark class centroids. Cluster overlap corresponds to off-diagonal confusion in the multiclass classifier.
 :::
 
+```{raw} latex
+\newpage
+```
+
 ### Discussion
 
 Binary AUC overstates non-avian classifier performance in a deployment-relevant sense. The discrepancy is architecture- and class-dependent: BirdNET's binary AUC overstated non-biotic discriminability by an average of 0.12 AUC units, while Perch's binary AUC closely tracked its multiclass performance.
