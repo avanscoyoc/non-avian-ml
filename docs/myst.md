@@ -7,13 +7,13 @@ authors:
     orcid: 0000-0001-8638-935X
     website: https://github.com/avanscoyoc/non-avian-ml
 abstract: |
-  Passive acoustic monitoring increasingly relies on bird-pretrained convolutional neural networks (CNNs) to detect non-avian targets, yet published benchmarks typically evaluate these classifiers using binary AUC against generic background negatives, a setting that does not capture how classifiers must discriminate among multiple co-occurring sound sources in the field. We benchmarked five CNN architectures (BirdNET, Perch, ResNet-18, MobileNet v2, VGG-11) on field-collected audio from California spanning ten non-avian sound classes: four anuran species and six anthropogenic and abiotic sources. We evaluated binary classification across a training-size sweep (N = 10–160 clips per class) and multiclass classification within two ecologically coherent groups (anuran and abiotic). Bird-pretrained models (BirdNET, Perch) substantially outperformed image-pretrained baselines under binary evaluation, with Perch reaching near-ceiling AUC at fewer training examples. Under multiclass evaluation, Perch maintained high recall for both anuran (95–100%) and non-biotic classes (68–94%), while BirdNET degraded markedly for non-biotic sounds (20–79% recall). BirdNET's binary AUC overstated its non-biotic multiclass performance by an average of 0.12 AUC units, whereas Perch's binary and multiclass AUC were closely aligned. These results show that binary AUC obscures meaningful performance differences between models, and that a model ranking higher under binary AUC may rank lower under multiclass evaluation. We recommend that practitioners evaluate classifiers in multiclass settings within ecologically coherent groups, and use Perch over BirdNET for deployments requiring discrimination among multiple non-avian sound classes.
+  Passive acoustic monitoring increasingly relies on bird-pretrained convolutional neural networks (CNNs) to detect non-avian targets, yet published benchmarks typically evaluate these classifiers using binary AUC against generic background negatives, a setting that does not capture how classifiers must discriminate among multiple co-occurring sound sources in the field. We benchmarked five CNNs (BirdNET, Perch, ResNet-18, MobileNet v2, VGG-11) on field-collected audio from California spanning ten non-avian sound classes: four anuran species and six anthropogenic and abiotic sources. We evaluated binary classification across a training-size sweep (N = 10–160 clips per class) and multiclass classification within two ecologically coherent groups (anuran and abiotic). Bird-pretrained models (BirdNET, Perch) substantially outperformed image-pretrained baselines under binary evaluation, with Perch reaching near-ceiling AUC at fewer training examples. Under multiclass evaluation, Perch maintained high recall for both anuran (95–100%) and non-biotic classes (68–94%), while BirdNET degraded markedly for non-biotic sounds (20–79% recall). BirdNET's binary AUC overstated its non-biotic multiclass performance by an average of 0.12 AUC units, whereas Perch's binary and multiclass AUC were closely aligned. These results show that binary AUC obscures meaningful performance differences between models, and that a model ranking higher under binary AUC may rank lower under multiclass evaluation. We recommend that practitioners evaluate classifiers in multiclass settings within ecologically coherent groups, and use Perch over BirdNET for deployments requiring discrimination among multiple non-avian sound classes.
 data_availability: |
   Labeled audio clips are archived on Zenodo at [doi:10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256).
 ---
 
 ```{raw} latex
-\captionsetup{font=footnotesize, skip=8pt}
+\captionsetup{font=small, skip=8pt}
 ```
 
 ## Introduction
@@ -93,6 +93,7 @@ For each group, we trained a single multiclass MLP head on top of frozen embeddi
 \newpage
 ```
 :::{figure} ../figs/broadband.png
+:width: 100%
 :label: fig-broadband
 :align: center
 Binary classifier AUC-ROC as a function of training size (N = 10–160 clips per class) for broadband anthropogenic and abiotic sound classes (device static, engine, generator, power tools, traffic, wind). Lines show mean AUC across 10 random seeds; shaded bands are 95% confidence intervals. BirdNET and Perch outperform the image-pretrained architectures (ResNet-18, MobileNet v2, VGG-11) at all training sizes.
@@ -102,6 +103,7 @@ Binary classifier AUC-ROC as a function of training size (N = 10–160 clips per
 \newpage
 ```
 :::{figure} ../figs/pulsed.png
+:width: 100%
 :label: fig-pulsed
 :align: center
 Binary classifier AUC-ROC as a function of training size for the four anuran classes (American bullfrog, Pacific chorus frog, Woodhouse's toad, foothill yellow-legged frog). BirdNET and Perch reach near-ceiling performance (AUC ≥ 0.95) at N = 20–40 for most classes; image-pretrained architectures do not converge within the tested training range.
@@ -117,6 +119,7 @@ For the multiclass abiotic classifiers, Perch’s multiclass recall spanned 68% 
 Confusions clustered into acoustic neighborhoods for BirdNET's non-biotic results. For instance, engine was frequently misclassified as wind (31%) and vice versa (12%), generator and power tools were mutually confused (37% and 21%), and traffic was frequently misclassified as device static (27%) (**Figure 2**). 
 
 :::{figure} ../figs/confusion_matrices.png
+:width: 100%
 :label: fig-confusion
 :align: center
 Row-normalised confusion matrices for the multiclass classifiers (N = 80 training clips per class, counts summed across 10 random seeds). Top row: anuran group (4 classes); bottom row: non-biotic group (6 classes). Left column: BirdNET; right column: Perch. Cell values show recall percentage; raw counts in parentheses.
@@ -128,6 +131,7 @@ Row-normalised confusion matrices for the multiclass classifiers (N = 80 trainin
 **Comparison between binary and multiclass classifiers.** For the anuran group, the mean binary − multiclass OVR AUC gap was +0.034 for BirdNET and +0.001 for Perch, indicating that Perch performed more consistently between binary and multiclass evaluation (**Figure 3a**). Both models showed negligible degradation under multiclass evaluation.
 
 :::{figure} ../figs/binary_vs_multiclass_auc.png
+:width: 100%
 :label: fig-binary_vs_multiclass
 :align: center
 Binary and multiclass one-vs-rest AUC at N = 80 training clips per class. Each point is one class–model combination; circles = BirdNET, squares = Perch. The dashed diagonal marks binary = multiclass AUC; points below it indicate that binary evaluation overstated performance. Left panel: anuran group (4 classes). Right panel: non-biotic group (6 classes).
@@ -144,6 +148,7 @@ The architecture-dependent gap was specific to the non-biotic group (**Figure 3*
 In the non-biotic group, power tools and generator formed distinct clusters, while engine, traffic, device static, and wind intermixed slightly in a central region, visually consistent with their multiclass confusion patterns (**Figure 4b**). 
 
 :::{figure} ../figs/tsne_embeddings.png
+:width: 100%
 :label: fig-tsne
 :align: center
 t-SNE projection of test-set embeddings (50 clips per class) for BirdNET (left column) and Perch (right column). Top row: anuran group; bottom row: non-biotic group. Each point is one audio clip; colours denote class; stars mark class centroids. Cluster overlap corresponds to off-diagonal confusion in the multiclass classifier.
@@ -212,33 +217,38 @@ van Merriënboer, B., Dumoulin, V., Hamer, J., Harrell, L., Burns, A., & Denton,
 :::
 
 :::{figure} ../figs/variable.png
+:width: 100%
 :label: fig-variable
 :align: center
 Binary classifier AUC-ROC as a function of training size for Coyote, Nutria, and Human voice. 
 :::
 
+```{raw} latex
+\newpage
+```
+
 ### Additional potential references
-PAM and soundscape ecology background
+**PAM and soundscape ecology background**
 
 Sugai, L. S. M., Silva, T. S. F., Ribeiro, J. W., & Llusia, D. (2019). Terrestrial passive acoustic monitoring: review and perspectives. BioScience, 69(1), 15–25.
 Stowell, D. (2022). Computational bioacoustics with deep learning: a review and roadmap. PeerJ, 10, e13152.
 Pijanowski, B. C., Villanueva-Rivera, L. J., Dumyahn, S. L., Farina, A., Krause, B. L., Napoletano, B. M., Gage, S. H., & Pieretti, N. (2011). Soundscape ecology: the science of sound in the landscape. BioScience, 61(3), 203–216.
 
-Bioacoustic benchmark and evaluation methodology
+**Bioacoustic benchmark and evaluation methodology**
 
 Knight, E. C., Hannah, K. C., Foley, G. J., Scott, C. D., Brigham, R. M., & Bayne, E. (2017). Recommendations for acoustic recognizer performance assessment with application to five common automated signal recognition programs. Avian Conservation and Ecology, 12(2), 14.
 
-Non-avian PAM applications
+**Non-avian PAM applications**
 
 Buxton, R. T., McKenna, M. F., Mennitt, D., Fristrup, K., Crooks, K., Angeloni, L., & Wittemyer, G. (2017). Noise pollution is pervasive in U.S. protected areas. Science, 356(6337), 531–533.
 Crump, P. F., & Houlahan, J. (2017). Designing better frog call recognition models. Ecology and Evolution, 7(9), 3087–3099.
 
-Transfer learning in bioacoustics
+**Transfer learning in bioacoustics**
 
 Dufourq, E., Batist, C., Foquet, R., & Durbach, I. (2022). Passive acoustic monitoring of animal populations with transfer learning. Ecological Informatics, 70, 101688.
 Lauha, P., Somervuo, P., Lehikoinen, P., Geres, L., Richter, T., Seibold, S., & Ovaskainen, O. (2022). Domain-specific neural networks improve automated bird sound recognition already with small amount of local data. Methods in Ecology and Evolution, 13(12), 2799–2810.
 
-Anuran-specific PAM
+**Anuran-specific PAM**
 
 Acevedo, M. A., Corrada-Bravo, C. J., Corrada-Bravo, H., Villanueva-Rivera, L. J., & Aide, T. M. (2009). Automated classification of bird and amphibian calls using machine learning: A comparison of methods. Ecological Informatics, 4(4), 206–214.
 
