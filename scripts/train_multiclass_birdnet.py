@@ -1,14 +1,20 @@
 """
 train_multiclass_birdnet.py
 
-Trains a single multiclass MLP classifier on BirdNET embeddings.
-One class per species, using train/test counts from config.yaml.
-No stratified k-fold — a single train/test split.
+Trains multiclass BirdNET MLP classifiers for two ecologically coherent groups:
+  anuran   : 4 anuran species
+  nonbiotic: 6 abiotic/anthropogenic classes
+
+Matches the class definitions and train/test counts used in
+experiment/multiclass_fit.py (N_TRAIN=80, N_TEST=50, SPLIT_SEED=42).
+Trains a single classifier (seed=1) and saves a deployable bundle.
 
 Usage:
     python scripts/train_multiclass_birdnet.py
+    python scripts/train_multiclass_birdnet.py --group anuran
 """
 
+import argparse
 import random
 import sys
 from pathlib import Path
@@ -28,92 +34,76 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.config import load_config
 from src.model_loader import BirdNETModel
 from src.results import save_classifier_bundle
 
+# ---------------------------------------------------------------------------
+# Class groups — must match experiment/multiclass_fit.py
+# ---------------------------------------------------------------------------
+
+GROUPS = {
+    "anuran": [
+        "pacific_chorus_frog",
+        "woodhouses_toad",
+        "yellow_legged_frog",
+        "american_bullfrog",
+    ],
+    "nonbiotic": [
+        "engine",
+        "generator",
+        "traffic",
+        "device_static",
+        "wind",
+        "power_tools",
+    ],
+}
+
+DATA_PATH    = Path("/workspaces/non-avian-ml/data")
+MODEL_PATH   = Path("/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
+RESULTS_PATH = Path("/workspaces/non-avian-ml/results")
+DATATYPE     = "data"
+N_TRAIN      = 80
+N_TEST       = 50
+SPLIT_SEED   = 42
+TRAIN_SEED   = 1
+BATCH_SIZE   = 32
+N_EPOCHS     = 20
 
 # ---------------------------------------------------------------------------
 # Data helpers
 # ---------------------------------------------------------------------------
 
-def collect_split(data_path: str, species: list[str], species_sizes: dict, datatype: str, seed: int):
-    """
-    For each species, select positive files for train and test using the
-    sizes specified in species_sizes.  Files are drawn from:
-        <data_path>/<species>/<datatype>/pos/
-
-    Returns:
-        train_files  : list of file paths
-        train_labels : list of int class indices
-        test_files   : list of file paths
-        test_labels  : list of int class indices
-        label_names  : list of species names (index == class label)
-    """
-    train_files, train_labels = [], []
-    test_files,  test_labels  = [], []
-    label_names = []
-
-    for class_idx, sp in enumerate(species):
-        pos_dir = Path(data_path) / sp / datatype / "pos"
-        all_pos = sorted(pos_dir.glob("*.wav"))
-
-        if species_sizes and sp in species_sizes:
-            n_train = species_sizes[sp]["train"]
-            n_test  = species_sizes[sp]["test"]
-        else:
-            raise ValueError(f"No species_sizes entry for '{sp}'")
-
-        total_needed = n_train + n_test
-        if len(all_pos) < total_needed:
-            raise ValueError(
-                f"{sp}: need {total_needed} pos files "
-                f"(train={n_train} + test={n_test}), "
-                f"found {len(all_pos)}"
-            )
-
-        rng = random.Random(seed)
-        shuffled = list(all_pos)
-        rng.shuffle(shuffled)
-
-        test_batch  = [str(f) for f in shuffled[:n_test]]
-        train_batch = [str(f) for f in shuffled[n_test : n_test + n_train]]
-
-        test_files  .extend(test_batch)
-        test_labels .extend([class_idx] * len(test_batch))
-        train_files .extend(train_batch)
-        train_labels.extend([class_idx] * len(train_batch))
-        label_names.append(sp)
-
-    return train_files, train_labels, test_files, test_labels, label_names
+def make_split(classes: list[str]) -> tuple[dict, dict]:
+    """Deterministic recording-level train/test split (SPLIT_SEED)."""
+    test_by_class, pool_by_class = {}, {}
+    for cls in classes:
+        pos = sorted((DATA_PATH / cls / DATATYPE / "pos").glob("*.wav"))
+        if len(pos) < N_TEST + N_TRAIN:
+            raise ValueError(f"{cls}: {len(pos)} clips, need >= {N_TEST + N_TRAIN}")
+        rng = random.Random(SPLIT_SEED)
+        rng.shuffle(pos)
+        test_by_class[cls] = [str(f) for f in pos[:N_TEST]]
+        pool_by_class[cls] = [str(f) for f in pos[N_TEST:]]
+    return test_by_class, pool_by_class
 
 
-# ---------------------------------------------------------------------------
-# Embedding extraction
-# ---------------------------------------------------------------------------
-
-def extract_all_embeddings(model: BirdNETModel, files: list[str]) -> torch.Tensor:
-    embeddings = []
+def extract_all(model: BirdNETModel, files: list[str]) -> torch.Tensor:
+    embs = []
     for i, fp in enumerate(files):
         if (i + 1) % 100 == 0:
-            print(f"    {i + 1}/{len(files)} files processed")
-        emb = model.extract_embeddings(fp)
-        embeddings.append(emb.flatten())
-    return torch.stack(embeddings)
+            print(f"      {i+1}/{len(files)}")
+        embs.append(model.extract_embeddings(fp).flatten())
+    return torch.stack(embs)
 
 
 # ---------------------------------------------------------------------------
-# Model definition
+# Model
 # ---------------------------------------------------------------------------
 
-def build_classifier(embedding_dim: int, n_classes: int) -> nn.Module:
+def build_classifier(dim: int, n_classes: int) -> nn.Module:
     return nn.Sequential(
-        nn.Linear(embedding_dim, 256),
-        nn.ReLU(),
-        nn.Dropout(0.3),
-        nn.Linear(256, 64),
-        nn.ReLU(),
-        nn.Dropout(0.3),
+        nn.Linear(dim, 256), nn.ReLU(), nn.Dropout(0.3),
+        nn.Linear(256, 64),  nn.ReLU(), nn.Dropout(0.3),
         nn.Linear(64, n_classes),
     )
 
@@ -122,39 +112,29 @@ def build_classifier(embedding_dim: int, n_classes: int) -> nn.Module:
 # Training
 # ---------------------------------------------------------------------------
 
-def train_classifier(
-    classifier: nn.Module,
-    embeddings: torch.Tensor,
-    labels: list[int],
-    device: torch.device,
-    batch_size: int,
-    n_epochs: int,
-) -> nn.Module:
-    labels_tensor = torch.tensor(labels, dtype=torch.long)
-    dataset = TensorDataset(embeddings.to(device), labels_tensor.to(device))
-    loader  = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+def train_classifier(clf: nn.Module, embs: torch.Tensor, labels: list[int], device) -> nn.Module:
+    labels_t = torch.tensor(labels, dtype=torch.long)
+    counts = torch.bincount(labels_t).float()
+    weights = (1.0 / counts.clamp(min=1)).to(device)
+    weights = weights / weights.sum() * len(counts)
 
-    # Inverse-frequency class weights so minority classes aren't drowned out
-    counts = torch.bincount(labels_tensor, minlength=labels_tensor.max().item() + 1).float()
-    class_weights = (1.0 / counts.clamp(min=1)).to(device)
-    class_weights = class_weights / class_weights.sum() * len(counts)  # normalise
+    ds     = TensorDataset(embs.to(device), labels_t.to(device))
+    loader = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=True)
+    criterion = nn.CrossEntropyLoss(weight=weights)
+    opt = torch.optim.Adam(clf.parameters(), lr=1e-3)
 
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(classifier.parameters(), lr=0.001)
-
-    classifier.train()
-    for epoch in range(n_epochs):
-        epoch_loss = 0.0
-        for feats, lbls in loader:
-            optimizer.zero_grad()
-            loss = criterion(classifier(feats), lbls)
+    clf.train()
+    for ep in range(N_EPOCHS):
+        total = 0.0
+        for x, y in loader:
+            opt.zero_grad()
+            loss = criterion(clf(x), y)
             loss.backward()
-            optimizer.step()
-            epoch_loss += loss.item()
-        if epoch % 5 == 0 or epoch == n_epochs - 1:
-            print(f"    Epoch {epoch + 1}/{n_epochs}  loss={epoch_loss / len(loader):.4f}")
-
-    return classifier
+            opt.step()
+            total += loss.item()
+        if ep % 5 == 0 or ep == N_EPOCHS - 1:
+            print(f"      epoch {ep+1:>3}  loss={total/len(loader):.4f}")
+    return clf
 
 
 # ---------------------------------------------------------------------------
@@ -162,30 +142,25 @@ def train_classifier(
 # ---------------------------------------------------------------------------
 
 def evaluate_classifier(
-    classifier: nn.Module,
-    embeddings: torch.Tensor,
+    clf: nn.Module,
+    embs: torch.Tensor,
     labels: list[int],
     label_names: list[str],
-    device: torch.device,
+    device,
 ) -> dict:
-    classifier.eval()
+    clf.eval()
     with torch.no_grad():
-        logits = classifier(embeddings.to(device))
-        preds  = torch.argmax(logits, dim=1).cpu().numpy()
+        logits = clf(embs.to(device))
+        probs  = torch.softmax(logits, dim=1).cpu().numpy()
+        preds  = logits.argmax(dim=1).cpu().numpy()
 
-    true = np.array(labels)
-    acc  = accuracy_score(true, preds)
-
-    with torch.no_grad():
-        probs = torch.softmax(logits, dim=1).cpu().numpy()
-    ovr_auc = roc_auc_score(true, probs, multi_class="ovr", average="macro")
-
-    print(f"\n  Overall accuracy: {acc:.4f}  |  Macro OVR AUC: {ovr_auc:.4f}")
-    print("\n  Per-class report:")
-    print(classification_report(true, preds, target_names=label_names, digits=3))
-
-    cm = confusion_matrix(true, preds)
-    return {"accuracy": acc, "ovr_auc": ovr_auc, "predictions": preds, "confusion_matrix": cm}
+    y = np.array(labels)
+    acc = accuracy_score(y, preds)
+    ovr_auc = roc_auc_score(y, probs, multi_class="ovr", average="macro")
+    cm = confusion_matrix(y, preds)
+    print(f"      accuracy={acc:.4f}  macro OVR AUC={ovr_auc:.4f}")
+    print(classification_report(y, preds, target_names=label_names, digits=3))
+    return {"accuracy": acc, "ovr_auc": ovr_auc, "cm": cm}
 
 
 # ---------------------------------------------------------------------------
@@ -193,14 +168,10 @@ def evaluate_classifier(
 # ---------------------------------------------------------------------------
 
 def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: Path) -> None:
-    # Row-normalize to recall percentages; keep raw counts for annotations
     row_sums = cm.sum(axis=1, keepdims=True).clip(min=1)
     cm_pct = cm / row_sums * 100
+    display_names = [n.replace("_", " ").capitalize() for n in label_names]
 
-    # Format species names: "american_bullfrog" -> "American bullfrog"
-    display_names = [name.replace("_", " ").capitalize() for name in label_names]
-
-    # Build annotation strings: "82.1%\n(n=41)"
     annot = np.empty(cm.shape, dtype=object)
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
@@ -216,28 +187,17 @@ def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: P
         "axes.spines.right": False,
     }):
         sns.heatmap(
-            cm_pct,
-            annot=annot,
-            fmt="",
-            cmap="Blues",
-            vmin=0,
-            vmax=100,
-            xticklabels=display_names,
-            yticklabels=display_names,
-            linewidths=0.4,
-            linecolor="#e0e0e0",
+            cm_pct, annot=annot, fmt="", cmap="Blues", vmin=0, vmax=100,
+            xticklabels=display_names, yticklabels=display_names,
+            linewidths=0.4, linecolor="#e0e0e0",
             cbar_kws={"label": "Recall (%)", "shrink": 0.6, "pad": 0.02},
-            ax=ax,
-            annot_kws={"size": 7.5, "linespacing": 1.3},
+            ax=ax, annot_kws={"size": 7.5, "linespacing": 1.3},
         )
-
         ax.set_xlabel("Predicted", fontsize=10, labelpad=6)
         ax.set_ylabel("True", fontsize=10, labelpad=6)
         ax.tick_params(axis="x", labelsize=8.5, length=0)
         ax.tick_params(axis="y", labelsize=8.5, length=0, rotation=0)
         plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
-
-        # Style the colorbar
         cbar = ax.collections[0].colorbar
         cbar.ax.tick_params(labelsize=8)
         cbar.set_label("Recall (%)", fontsize=9)
@@ -250,9 +210,60 @@ def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: P
     print(f"  Confusion matrix saved to {output_path}")
 
 
-# Minimum test samples required to include a species in multiclass evaluation.
-# Classes below this threshold have too few samples for meaningful evaluation.
-MIN_TEST_SAMPLES = 20
+# ---------------------------------------------------------------------------
+# Per-group training
+# ---------------------------------------------------------------------------
+
+def run_group(group: str, classes: list[str], birdnet: BirdNETModel, device):
+    print(f"\n{'='*60}")
+    print(f"  group={group}  model=birdnet  seed={TRAIN_SEED}")
+
+    test_by_class, pool_by_class = make_split(classes)
+
+    test_files  = [f for cls in classes for f in test_by_class[cls]]
+    test_labels = [i for i, cls in enumerate(classes) for _ in test_by_class[cls]]
+
+    print(f"  Extracting test embeddings ({len(test_files)} clips)...")
+    test_embs = extract_all(birdnet, test_files)
+
+    rng = random.Random(TRAIN_SEED)
+    train_parts, train_labels = [], []
+    for i, cls in enumerate(classes):
+        chosen = rng.sample(pool_by_class[cls], N_TRAIN)
+        print(f"  Extracting train embeddings for {cls} ({N_TRAIN} clips)...")
+        train_parts.append(extract_all(birdnet, chosen))
+        train_labels.extend([i] * N_TRAIN)
+
+    train_embs = torch.cat(train_parts)
+
+    dim = test_embs.shape[1]
+    clf = build_classifier(dim, len(classes)).to(device)
+    print(f"\n  Training {len(classes)}-class classifier...")
+    clf = train_classifier(clf, train_embs, train_labels, device)
+
+    print("\n  Evaluating on test set...")
+    metrics = evaluate_classifier(clf, test_embs, test_labels, classes, device)
+
+    figs_path = RESULTS_PATH.parent / "figs"
+    plot_confusion_matrix(
+        metrics["cm"], classes,
+        figs_path / f"confusion_matrix_multiclass_{group}_birdnet.png",
+    )
+
+    print(f"\n  Saving bundle: multiclass_{group}_birdnet ...")
+    save_classifier_bundle(
+        classifier=clf,
+        embedding_model=birdnet,
+        model_name="birdnet",
+        species=classes,
+        training_size=N_TRAIN,
+        random_seed=TRAIN_SEED,
+        test_auc=metrics["ovr_auc"],
+        n_epochs=N_EPOCHS,
+        results_path=str(RESULTS_PATH),
+        bundle_name=f"multiclass_{group}_birdnet",
+        labels={str(i): cls for i, cls in enumerate(classes)},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -260,87 +271,23 @@ MIN_TEST_SAMPLES = 20
 # ---------------------------------------------------------------------------
 
 def main():
-    config_path = Path(__file__).parent.parent / "src" / "config.yaml"
-    config = load_config(str(config_path))
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--group", choices=list(GROUPS), default=None,
+                        help="Run a single group only (default: both)")
+    args = parser.parse_args()
 
-    birdnet_model_path = str(
-        Path(__file__).parent.parent
-        / "models"
-        / "birdnet_2.4"
-        / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
-    )
+    groups_to_run = {args.group: GROUPS[args.group]} if args.group else GROUPS
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # Filter species with insufficient test samples
-    excluded = [
-        sp for sp, sizes in config.species_sizes.items()
-        if sizes["test"] < MIN_TEST_SAMPLES
-    ]
-    if excluded:
-        print(f"\nExcluding {len(excluded)} species with < {MIN_TEST_SAMPLES} test samples:")
-        for sp in excluded:
-            print(f"  {sp} (test={config.species_sizes[sp]['test']})")
-    eligible_species = [sp for sp in config.species if sp not in excluded]
-
-    # Use the first random seed from config (no multiple seeds needed here)
-    seed = config.random_seeds[0] if config.random_seeds else 42
-
-    print(f"\nCollecting files for {len(eligible_species)} species (seed={seed})...")
-    train_files, train_labels, test_files, test_labels, label_names = collect_split(
-        data_path=config.data_path,
-        species=eligible_species,
-        species_sizes=config.species_sizes,
-        datatype=config.datatype,
-        seed=seed,
-    )
-    print(f"  Train: {len(train_files)} files | Test: {len(test_files)} files")
-
     print("\nLoading BirdNET model...")
-    birdnet = BirdNETModel(birdnet_model_path)
+    birdnet = BirdNETModel(str(MODEL_PATH))
 
-    print(f"\nExtracting train embeddings ({len(train_files)} files)...")
-    train_embs = extract_all_embeddings(birdnet, train_files)
+    for group, classes in groups_to_run.items():
+        run_group(group, classes, birdnet, device)
 
-    print(f"\nExtracting test embeddings ({len(test_files)} files)...")
-    test_embs = extract_all_embeddings(birdnet, test_files)
-
-    n_classes     = len(label_names)
-    embedding_dim = train_embs.shape[1]
-    print(f"\nBuilding {n_classes}-class classifier (embedding_dim={embedding_dim})...")
-    classifier = build_classifier(embedding_dim, n_classes).to(device)
-
-    print(f"\nTraining (epochs={config.n_epochs}, batch={config.batch_size})...")
-    classifier = train_classifier(
-        classifier, train_embs, train_labels,
-        device, config.batch_size, config.n_epochs,
-    )
-
-    print("\nEvaluating on test set...")
-    results = evaluate_classifier(classifier, test_embs, test_labels, label_names, device)
-
-    figs_path = Path(__file__).parent.parent / "figs"
-    plot_confusion_matrix(
-        results["confusion_matrix"],
-        label_names,
-        figs_path / "confusion_matrix_multiclass_birdnet.png",
-    )
-
-    print("\nSaving classifier bundle...")
-    save_classifier_bundle(
-        classifier=classifier,
-        embedding_model=birdnet,
-        model_name="birdnet",
-        species=label_names,
-        training_size=None,
-        random_seed=seed,
-        test_auc=results["ovr_auc"],
-        n_epochs=config.n_epochs,
-        results_path=config.results_path,
-        bundle_name="multiclass_birdnet",
-        labels={str(i): sp for i, sp in enumerate(label_names)},
-    )
+    print("\nDone.")
 
 
 if __name__ == "__main__":
