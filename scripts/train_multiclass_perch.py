@@ -1,7 +1,7 @@
 """
-train_multiclass_birdnet.py
+train_multiclass_perch.py
 
-Trains multiclass BirdNET MLP classifiers for two ecologically coherent groups:
+Trains multiclass Perch MLP classifiers for two ecologically coherent groups:
   anuran   : 4 anuran species
   nonbiotic: 6 abiotic/anthropogenic classes
 
@@ -10,8 +10,8 @@ experiment/multiclass_fit.py (N_TRAIN=80, N_TEST=50, SPLIT_SEED=42).
 Trains a single classifier (seed=1) and saves a deployable bundle.
 
 Usage:
-    python scripts/train_multiclass_birdnet.py
-    python scripts/train_multiclass_birdnet.py --group anuran
+    python scripts/train_multiclass_perch.py
+    python scripts/train_multiclass_perch.py --group anuran
 """
 
 import argparse
@@ -34,7 +34,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 
-from src.model_loader import BirdNETModel
+from src.model_loader import PerchModel
 from src.results import save_classifier_bundle
 
 # ---------------------------------------------------------------------------
@@ -59,9 +59,9 @@ GROUPS = {
 }
 
 DATA_PATH    = Path("/workspaces/non-avian-ml/data")
-MODEL_PATH   = Path("/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
+MODEL_PATH   = Path("/workspaces/non-avian-ml/models/perch_8")
 RESULTS_PATH = Path("/workspaces/non-avian-ml/results")
-DATATYPE     = "data"
+DATATYPE     = "data_5s"
 N_TRAIN      = 80
 N_TEST       = 50
 SPLIT_SEED   = 42
@@ -87,7 +87,7 @@ def make_split(classes: list[str]) -> tuple[dict, dict]:
     return test_by_class, pool_by_class
 
 
-def extract_all(model: BirdNETModel, files: list[str]) -> torch.Tensor:
+def extract_all(model: PerchModel, files: list[str]) -> torch.Tensor:
     embs = []
     for i, fp in enumerate(files):
         if (i + 1) % 100 == 0:
@@ -214,9 +214,9 @@ def plot_confusion_matrix(cm: np.ndarray, label_names: list[str], output_path: P
 # Per-group training
 # ---------------------------------------------------------------------------
 
-def run_group(group: str, classes: list[str], birdnet: BirdNETModel, device):
+def run_group(group: str, classes: list[str], perch: PerchModel, device):
     print(f"\n{'='*60}")
-    print(f"  group={group}  model=birdnet  seed={TRAIN_SEED}")
+    print(f"  group={group}  model=perch  seed={TRAIN_SEED}")
 
     test_by_class, pool_by_class = make_split(classes)
 
@@ -224,14 +224,14 @@ def run_group(group: str, classes: list[str], birdnet: BirdNETModel, device):
     test_labels = [i for i, cls in enumerate(classes) for _ in test_by_class[cls]]
 
     print(f"  Extracting test embeddings ({len(test_files)} clips)...")
-    test_embs = extract_all(birdnet, test_files)
+    test_embs = extract_all(perch, test_files)
 
     rng = random.Random(TRAIN_SEED)
     train_parts, train_labels = [], []
     for i, cls in enumerate(classes):
         chosen = rng.sample(pool_by_class[cls], N_TRAIN)
         print(f"  Extracting train embeddings for {cls} ({N_TRAIN} clips)...")
-        train_parts.append(extract_all(birdnet, chosen))
+        train_parts.append(extract_all(perch, chosen))
         train_labels.extend([i] * N_TRAIN)
 
     train_embs = torch.cat(train_parts)
@@ -247,21 +247,21 @@ def run_group(group: str, classes: list[str], birdnet: BirdNETModel, device):
     figs_path = RESULTS_PATH.parent / "figs"
     plot_confusion_matrix(
         metrics["cm"], classes,
-        figs_path / f"confusion_matrix_multiclass_{group}_birdnet.png",
+        figs_path / f"confusion_matrix_multiclass_{group}_perch.png",
     )
 
-    print(f"\n  Saving bundle: multiclass_{group}_birdnet ...")
+    print(f"\n  Saving bundle: multiclass_{group}_perch ...")
     save_classifier_bundle(
         classifier=clf,
-        embedding_model=birdnet,
-        model_name="birdnet",
+        embedding_model=perch,
+        model_name="perch",
         species=classes,
         training_size=N_TRAIN,
         random_seed=TRAIN_SEED,
         test_auc=metrics["ovr_auc"],
         n_epochs=N_EPOCHS,
         results_path=str(RESULTS_PATH),
-        bundle_name=f"multiclass_{group}_birdnet",
+        bundle_name=f"multiclass_{group}_perch",
         labels={str(i): cls for i, cls in enumerate(classes)},
     )
 
@@ -281,11 +281,11 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    print("\nLoading BirdNET model...")
-    birdnet = BirdNETModel(str(MODEL_PATH))
+    print("\nLoading Perch model...")
+    perch = PerchModel(str(MODEL_PATH))
 
     for group, classes in groups_to_run.items():
-        run_group(group, classes, birdnet, device)
+        run_group(group, classes, perch, device)
 
     print("\nDone.")
 

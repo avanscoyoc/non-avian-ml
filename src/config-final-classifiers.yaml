@@ -1,7 +1,8 @@
 experiments:
 - name: final_classifiers
-  description: "Production run: trained final BirdNET classifiers using all available data per species, single seed, and saves classifier bundles for use."
+  description: "Production run: trained final Perch classifiers using all available data per species, single seed, and saves classifier bundles for use."
   models:
+  - perch
   - birdnet
   species_sizes:
     device_static:        {train: 1133, test: 283}
