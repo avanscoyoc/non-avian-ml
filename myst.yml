@@ -13,6 +13,10 @@ project:
       template: ./docs/lapreprint-custom
       output: docs/manuscript.pdf
       article: docs/myst.md
+    - format: docx    
+      template: ./docs/lapreprint-custom
+      output: docs/manuscript.docx
+      article: docs/myst.md
 
 site:
   title: Non-Avian Acoustic Classifier Development
