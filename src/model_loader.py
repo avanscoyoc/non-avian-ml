@@ -1,244 +1,277 @@
+"""Frozen pretrained encoders.
+
+Every encoder maps 3-s clips to an L2-normalised embedding and, where the model has its own
+classifier, to raw label scores (used only for zero-shot). Device policy: PyTorch models use CUDA
+when available; TensorFlow/TFLite models always run on the CPU (TF is hidden from the GPU).
+"""
+import os
+import time
+import warnings
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
+import torchaudio.transforms as T
 from torchvision import models
 from torchvision.models import ResNet18_Weights, MobileNet_V2_Weights, VGG11_Weights
-import numpy as np
-import librosa
 
-try:
-    import ai_edge_litert.interpreter as tflite
-except ImportError:
-    tflite = None
+from src.paths import MODELS  # sets BIRDNET_APP_DATA before birdnet is imported
+from src.data_loader import load_clip, centre_pad
+
+MODEL_NAMES = ["birdnet", "birdnet3", "perch", "perch2", "cnn14", "resnet", "mobilenet", "vgg"]
 
 
-class BirdNETModel:
-    """BirdNET feature extractor using TFLite model logits as embeddings."""
+def torch_device() -> torch.device:
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def __init__(self, model_path: str):
-        if tflite is None:
-            raise ImportError("ai_edge_litert not available")
 
-        self.model_path = model_path
-        self.sample_rate = 48000
-        self.length_s = 3.0
+def _import_tf():
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+    import tensorflow as tf
+    tf.get_logger().setLevel("ERROR")
+    try:
+        tf.config.set_visible_devices([], "GPU")  # keep TF off the GPU (PyTorch uses it)
+    except RuntimeError:
+        pass  # TF already initialised in this process
+    return tf
 
-        print(f"[BirdNET] Loading model: {model_path}")
-        self.interpreter = tflite.Interpreter(model_path=model_path)
+
+class Encoder:
+    name: str
+    sample_rate: int
+    dim: int
+    batch_size = 64
+    labels: list[str] | None = None  # model's own classes, if any (for zero-shot)
+    device = "cpu"
+
+    def _load(self, path) -> np.ndarray:
+        return load_clip(path, self.sample_rate)
+
+    def _forward(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+        """(batch, samples) float32 -> (embeddings, label scores or None)."""
+        raise NotImplementedError
+
+    def encode(self, paths: list) -> tuple[np.ndarray, np.ndarray | None]:
+        embs, scores = [], []
+        start, step = time.time(), max(1, len(paths) // 10)
+        # Audio is loaded in the main thread: ~5 ms/clip, and threaded resampling can trip an
+        # OpenMP assertion when TensorFlow and PyTorch are both loaded in the process.
+        for i in range(0, len(paths), self.batch_size):
+            audio = np.stack([self._load(p) for p in paths[i:i + self.batch_size]])
+            e, s = self._forward(audio)
+            embs.append(e.astype(np.float32))
+            if s is not None:
+                scores.append(s.astype(np.float32))
+            done = min(i + self.batch_size, len(paths))
+            if done // step != (done - len(audio)) // step or done == len(paths):
+                print(f"    [{self.name}] {done}/{len(paths)} clips ({time.time() - start:.0f}s)", flush=True)
+        emb = np.concatenate(embs)
+        emb /= np.linalg.norm(emb, axis=1, keepdims=True) + 1e-8
+        return emb, (np.concatenate(scores) if scores else None)
+
+    def extract_embeddings(self, path) -> torch.Tensor:
+        """Single clip -> (1, dim) tensor (used by the multiclass/binary scripts)."""
+        return torch.from_numpy(self.encode([path])[0])
+
+    def cleanup(self):
+        pass
+
+
+# ── TensorFlow / TFLite encoders (CPU) ────────────────────────────────────────
+
+class BirdNETModel(Encoder):
+    """BirdNET 2.4: 1024-D embedding (GLOBAL_AVG_POOL) before the 6,522-class head."""
+    name, sample_rate, dim, batch_size = "birdnet", 48000, 1024, 32
+    EMBEDDING_TENSOR = "model/GLOBAL_AVG_POOL/Mean"
+
+    def __init__(self, model_path=MODELS / "birdnet_2.4" / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"):
+        import ai_edge_litert.interpreter as tflite
+        model_path = Path(model_path)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # preserve_all_tensors "debugging" warning
+            self.interpreter = tflite.Interpreter(
+                model_path=str(model_path), num_threads=os.cpu_count(),
+                experimental_preserve_all_tensors=True,
+            )
         self.interpreter.allocate_tensors()
+        self.input_index = self.interpreter.get_input_details()[0]["index"]
+        self.logits_index = self.interpreter.get_output_details()[0]["index"]
+        self.embedding_index = next(
+            t["index"] for t in self.interpreter.get_tensor_details() if t["name"] == self.EMBEDDING_TENSOR
+        )
+        labels_file = model_path.parent / "BirdNET_GLOBAL_6K_V2.4_Labels_af.txt"
+        self.labels = labels_file.read_text(encoding="utf8").splitlines()
 
-        self.input_details = self.interpreter.get_input_details()
-        self.output_details = self.interpreter.get_output_details()
-        self.input_index = self.input_details[0]["index"]
-        self.output_index = self.output_details[0]["index"]
-        self.feature_dim = self.output_details[0]["shape"][1]
-        print(f"[BirdNET] Model loaded (embedding dim: {self.feature_dim})")
+    def _forward(self, audio):
+        embs, logits = [], []
+        for clip in audio:
+            self.interpreter.set_tensor(self.input_index, clip[None])
+            self.interpreter.invoke()
+            embs.append(self.interpreter.get_tensor(self.embedding_index)[0].copy())
+            logits.append(self.interpreter.get_tensor(self.logits_index)[0].copy())
+        return np.stack(embs), np.stack(logits)
 
     def cleanup(self):
-        """Clean up TFLite resources."""
-        import gc
-        if hasattr(self, 'interpreter'):
-            del self.interpreter
-        gc.collect()
-
-    def _load_audio(self, path: str) -> np.ndarray:
-        y, sr = librosa.load(path, sr=self.sample_rate, mono=True)
-        target_len = int(self.sample_rate * self.length_s)
-        if len(y) > target_len:
-            start = (len(y) - target_len) // 2
-            y = y[start : start + target_len]
-        elif len(y) < target_len:
-            y = np.pad(y, (0, target_len - len(y)), mode="constant")
-        return y.astype(np.float32)
-
-    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
-        audio = self._load_audio(audio_file_path)
-        inp = np.expand_dims(audio, axis=0)
-
-        self.interpreter.set_tensor(self.input_index, inp)
-        self.interpreter.invoke()
-
-        logits = self.interpreter.get_tensor(self.output_index)
-        vec = logits[0].astype(np.float32)
-        vec = vec / (np.linalg.norm(vec) + 1e-8)
-        return torch.from_numpy(vec).unsqueeze(0)
+        del self.interpreter
 
 
-class PerchModel:
-    """Perch feature extractor using TensorFlow Hub SavedModel."""
+class _PaddedTFEncoder(Encoder):
+    """5-s TF models: centre-pad 3-s clips; fixed batch shape avoids XLA recompiles.
+    Batch 8 is as fast as 16-32 on CPU and keeps peak memory near 3 GB."""
+    sample_rate, window_s, batch_size = 32000, 5.0, 8
 
-    def __init__(self, model_path: str):
-        import os
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-        import tensorflow as tf
-        tf.get_logger().setLevel('ERROR')
+    def _load(self, path):
+        return centre_pad(load_clip(path, self.sample_rate), self.sample_rate, self.window_s)
+
+    def _call(self, batch) -> dict:
+        raise NotImplementedError
+
+    def _forward(self, audio):
+        n = len(audio)
+        if n < self.batch_size:
+            audio = np.concatenate([audio, np.zeros((self.batch_size - n, audio.shape[1]), np.float32)])
+        out = self._call(self.tf.constant(audio))
+        scores = out["label"].numpy()[:n] if self.labels is not None else None
+        return out["embedding"].numpy()[:n], scores
+
+
+class PerchModel(_PaddedTFEncoder):
+    """Perch v8 (bird-vocalization-classifier, Perch 1.0 family): 1280-D embedding; bird labels only."""
+    name, dim = "perch", 1280
+
+    def __init__(self, model_path=MODELS / "perch_8"):
+        self.tf = _import_tf()
         import tensorflow_hub as hub
-        import soundfile as sf
-
-        self.tf = tf
-        self.sf = sf
-        self.window_size_s = 5.0
-        self.sample_rate = 32000
-        self.feature_dim = 1280
-
-        print(f"[Perch] Loading model: {model_path}")
-        self._model = hub.load(model_path)
-        if hasattr(self._model, 'infer_tf'):
-            self._infer = self._model.infer_tf
-        elif 'serving_default' in self._model.signatures:
-            self._infer = self._model.signatures['serving_default']
-        else:
-            self._infer = self._model
-        print(f"[Perch] Model loaded (embedding dim: {self.feature_dim})")
+        self._model = hub.load(str(model_path))
+        self._call = lambda x: self._model.infer_tf(x)
 
     def cleanup(self):
-        """Clean up TensorFlow resources."""
-        import gc
-        self.tf.keras.backend.clear_session()
-        del self._model
-        del self._infer
-        gc.collect()
-
-    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
-        y, sr = self.sf.read(audio_file_path, dtype="float32")
-
-        # Perch expects mono waveform shaped [batch, samples].
-        if y.ndim == 2:
-            # soundfile returns [samples, channels] for multi-channel audio.
-            y = np.mean(y, axis=1)
-        elif y.ndim > 2:
-            raise ValueError(f"Unsupported audio shape for {audio_file_path}: {y.shape}")
-
-        if sr != self.sample_rate:
-            y = librosa.resample(y, orig_sr=sr, target_sr=self.sample_rate)
-        target_len = int(self.sample_rate * self.window_size_s)
-        if len(y) > target_len:
-            start = (len(y) - target_len) // 2
-            y = y[start : start + target_len]
-        elif len(y) < target_len:
-            y = np.pad(y, (0, target_len - len(y)), mode="constant")
-
-        waveform = self.tf.constant(y[np.newaxis, :], dtype=self.tf.float32)
-
-        if callable(self._infer):
-            output = self._infer(waveform)
-        else:
-            output = self._infer
-
-        if isinstance(output, dict):
-            if 'embedding' in output:
-                embeddings = output['embedding'].numpy()
-            elif 'output_0' in output:
-                embeddings = output['output_0'].numpy()
-            else:
-                embeddings = list(output.values())[0].numpy()
-        else:
-            embeddings = output.numpy()
-
-        vec = embeddings[0].astype(np.float32)
-        vec = vec / (np.linalg.norm(vec) + 1e-8)
-        return torch.from_numpy(vec).unsqueeze(0)
+        del self._model, self._call
 
 
-class CNNEmbeddingModel(nn.Module):
-    """Frozen pretrained CNN feature extractor for audio spectrograms."""
+class Perch2Model(_PaddedTFEncoder):
+    """Perch 2.0 (CPU SavedModel via the birdnet package): 1536-D embedding, 14,795 labels (iNat + FSD50K)."""
+    name, dim = "perch2", 1536
 
-    def __init__(self, backbone_name: str):
-        super().__init__()
-        self.backbone_name = backbone_name
-
-        if backbone_name == "resnet":
-            base_model = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-            base_model.conv1 = nn.Conv2d(
-                1, 64, kernel_size=7, stride=2, padding=3, bias=False
-            )
-            self.feature_extractor = nn.Sequential(*list(base_model.children())[:-1])
-            self.feature_dim = 512
-
-        elif backbone_name == "mobilenet":
-            base_model = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
-            base_model.features[0][0] = nn.Conv2d(
-                1, 32, kernel_size=3, stride=2, padding=1, bias=False
-            )
-            self.feature_extractor = base_model.features
-            self.feature_dim = 1280
-            self.pool = nn.AdaptiveAvgPool2d(1)
-
-        elif backbone_name == "vgg":
-            base_model = models.vgg11(weights=VGG11_Weights.IMAGENET1K_V1)
-            base_model.features[0] = nn.Conv2d(1, 64, kernel_size=3, padding=1)
-            self.feature_extractor = base_model.features
-            self.feature_dim = 4096
-            self.pool = nn.AdaptiveAvgPool2d((7, 7))
-            self.flatten_fc = nn.Sequential(
-                nn.Flatten(),
-                nn.Linear(512 * 7 * 7, 4096),
-                nn.ReLU(inplace=True),
-                nn.Dropout(0.5),
-                nn.Linear(4096, 4096),
-                nn.ReLU(inplace=True),
-            )
-
-        else:
-            raise ValueError(f"Unknown backbone: {backbone_name}")
-
-        for param in self.parameters():
-            param.requires_grad = False
-
-        print(f"[{backbone_name.upper()}] Model loaded (embedding dim: {self.feature_dim})")
+    def __init__(self):
+        from birdnet.acoustic.models.perch_v2.pb import AcousticPBDownloaderPerchV2
+        self.tf = _import_tf()
+        path, labels = AcousticPBDownloaderPerchV2.get_model_path_and_labels("CPU")
+        self.labels = list(labels)
+        self._model = self.tf.saved_model.load(str(path))
+        fn = self._model.signatures["serving_default"]
+        self._call = lambda x: fn(inputs=x)
 
     def cleanup(self):
-        """Clean up PyTorch model resources."""
-        import gc
-        self.cpu()
-        for param in self.parameters():
-            del param
-        gc.collect()
+        del self._model, self._call
+
+
+# ── PyTorch encoders (CUDA if available) ──────────────────────────────────────
+
+class _TorchEncoder(Encoder):
+    batch_size = 32
+
+    def __init__(self, device=None):
+        self.device = device or torch_device()
+
+    def cleanup(self):
+        for attr in ("model", "backbone"):
+            if hasattr(self, attr):
+                delattr(self, attr)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def forward(self, x):
-        x = self.feature_extractor(x)
 
-        if self.backbone_name == "mobilenet":
-            x = self.pool(x)
-            x = torch.flatten(x, 1)
-        elif self.backbone_name == "vgg":
-            x = self.pool(x)
-            x = self.flatten_fc(x)
+class BirdNET3Model(_TorchEncoder):
+    """BirdNET 3.0 (preview3.1, TorchScript via the birdnet package): 1280-D embedding, >11k labels."""
+    name, sample_rate, dim = "birdnet3", 32000, 1280
+
+    def __init__(self, device=None):
+        super().__init__(device)
+        from birdnet.acoustic.models.v3_0.pt import AcousticPTDownloaderV3_0
+        path, labels = AcousticPTDownloaderV3_0.get_model_path_and_labels("en_us", "fp32")
+        self.labels = list(labels)
+        self.model = torch.jit.load(str(path), map_location=self.device).eval()
+
+    @torch.inference_mode()
+    def _forward(self, audio):
+        scores, emb = self.model(torch.from_numpy(audio).to(self.device))
+        return emb.cpu().numpy(), scores.cpu().numpy()
+
+
+class CNN14Model(_TorchEncoder):
+    """PANNs CNN14 (AudioSet): 2048-D embedding, 527 AudioSet labels."""
+    name, sample_rate, dim = "cnn14", 32000, 2048
+
+    def __init__(self, device=None):
+        super().__init__(device)
+        from src.cnn14 import Cnn14
+        self.model = Cnn14.from_checkpoint(MODELS / "cnn14" / "Cnn14_mAP=0.431.pth").to(self.device)
+        self.labels = pd.read_csv(MODELS / "cnn14" / "class_labels_indices.csv")["display_name"].tolist()
+
+    @torch.inference_mode()
+    def _forward(self, audio):
+        scores, emb = self.model(torch.from_numpy(audio).to(self.device))
+        return emb.cpu().numpy(), scores.cpu().numpy()
+
+
+class CNNEmbeddingModel(_TorchEncoder):
+    """ImageNet CNNs on log-mel spectrograms, fully pretrained and in eval mode.
+
+    The 16 kHz, 64-mel dB spectrogram of the whole 3-s clip is scaled per clip to [0, 1],
+    repeated to 3 channels and ImageNet-normalised, so the pretrained first layer is kept.
+    """
+    sample_rate = 16000
+    MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+    STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+
+    def __init__(self, backbone_name: str, device=None):
+        super().__init__(device)
+        self.name = backbone_name
+        if backbone_name == "resnet":
+            backbone = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+            backbone.fc = nn.Identity()
+            self.dim = 512
+        elif backbone_name == "mobilenet":
+            backbone = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
+            backbone.classifier = nn.Identity()
+            self.dim = 1280
+        elif backbone_name == "vgg":
+            backbone = models.vgg11(weights=VGG11_Weights.IMAGENET1K_V1)
+            backbone.classifier = backbone.classifier[:-1]  # pretrained fc6/fc7 -> 4096-D
+            self.dim = 4096
         else:
-            x = torch.flatten(x, 1)
+            raise ValueError(f"Unknown backbone: {backbone_name}")
+        self.backbone = backbone.eval().to(self.device)
+        self.melspec = nn.Sequential(T.MelSpectrogram(sample_rate=16000, n_mels=64), T.AmplitudeToDB()).to(self.device)
+        self.mean, self.std = self.MEAN.to(self.device), self.STD.to(self.device)
 
-        x = x / (torch.norm(x, dim=1, keepdim=True) + 1e-8)
-        return x
-
-    def extract_embeddings(self, audio_file_path: str) -> torch.Tensor:
-        from data_loader import preprocess_audio
-
-        mel_spec = preprocess_audio(audio_file_path)
-        if mel_spec.dim() == 3:
-            mel_spec = mel_spec.unsqueeze(0)
-
-        with torch.no_grad():
-            embeddings = self.forward(mel_spec)
-
-        return embeddings
+    @torch.inference_mode()
+    def _forward(self, audio):
+        mel = self.melspec(torch.from_numpy(audio).to(self.device)).unsqueeze(1)  # (B, 1, 64, 241)
+        lo = mel.amin(dim=(2, 3), keepdim=True)
+        hi = mel.amax(dim=(2, 3), keepdim=True)
+        x = ((mel - lo) / (hi - lo + 1e-8)).expand(-1, 3, -1, -1)
+        return self.backbone((x - self.mean) / self.std).cpu().numpy(), None
 
 
 def load_model(model_name: str):
-    """Load pretrained model as frozen feature extractor."""
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    if model_name in ["resnet", "mobilenet", "vgg"]:
-        model = CNNEmbeddingModel(model_name)
-        return model.to(device), device
-
-    elif model_name == "birdnet":
-        model_path = "/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
-        return BirdNETModel(model_path), device
-
+    """Load a frozen encoder. Returns (encoder, device it runs on)."""
+    if model_name == "birdnet":
+        model = BirdNETModel()
+    elif model_name == "birdnet3":
+        model = BirdNET3Model()
     elif model_name == "perch":
-        model_path = "/workspaces/non-avian-ml/models/perch_8"
-        return PerchModel(model_path), device
-
+        model = PerchModel()
+    elif model_name == "perch2":
+        model = Perch2Model()
+    elif model_name == "cnn14":
+        model = CNN14Model()
+    elif model_name in ("resnet", "mobilenet", "vgg"):
+        model = CNNEmbeddingModel(model_name)
     else:
         raise ValueError(f"Unknown model: {model_name}")
+    print(f"[{model_name}] loaded on {model.device} (embedding dim {model.dim})")
+    return model, torch.device(model.device)

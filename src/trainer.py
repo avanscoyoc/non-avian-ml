@@ -1,107 +1,85 @@
-import gc
+"""MLP classifier heads on cached embeddings, many independent heads trained at once.
+
+`HeadEnsemble` holds H independent copies of the original head (Linear->256->64->2, ReLU, dropout 0.3)
+as batched weights. Each head sees only its own training rows, its own shuffles and minibatches
+of `batch_size`, and the loss is the sum of the per-head mean losses, so with Adam (a per-parameter
+optimiser) every head gets exactly the update it would get if trained alone.
+"""
+import math
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import roc_auc_score
+import torch.nn.functional as F
+
+HIDDEN = (256, 64)
+DROPOUT = 0.3
 
 
-def cleanup_model(model):
-    """Release model resources and clear cache."""
-    if model is None:
-        return
-    
-    # Handle Perch models with TensorFlow cleanup
-    if hasattr(model, 'cleanup'):
-        model.cleanup()
-    
-    # Handle PyTorch CNN models
-    elif isinstance(model, nn.Module):
-        model.cpu()
-        for param in model.parameters():
-            del param
-    
-    # Handle BirdNET TFLite models
-    elif hasattr(model, 'interpreter'):
-        del model.interpreter
-    
-    del model
-    gc.collect()
-    
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+class HeadEnsemble(nn.Module):
+    def __init__(self, n_heads: int, in_dim: int, n_classes: int = 2):
+        super().__init__()
+        dims = (in_dim, *HIDDEN, n_classes)
+        self.weights = nn.ParameterList()
+        self.biases = nn.ParameterList()
+        for fan_in, fan_out in zip(dims[:-1], dims[1:]):
+            bound = 1 / math.sqrt(fan_in)  # same init as nn.Linear
+            self.weights.append(nn.Parameter(torch.empty(n_heads, fan_in, fan_out).uniform_(-bound, bound)))
+            self.biases.append(nn.Parameter(torch.empty(n_heads, 1, fan_out).uniform_(-bound, bound)))
+
+    def forward(self, x):  # x: (H, batch, in_dim) -> (H, batch, n_classes)
+        for i, (w, b) in enumerate(zip(self.weights, self.biases)):
+            x = torch.baddbmm(b, x, w)
+            if i < len(self.weights) - 1:
+                x = F.dropout(F.relu(x), DROPOUT, self.training)
+        return x
+
+    def head(self, i: int) -> nn.Sequential:
+        """Head i as the original nn.Sequential (for saving classifier bundles)."""
+        layers = []
+        for j, (w, b) in enumerate(zip(self.weights, self.biases)):
+            lin = nn.Linear(w.shape[1], w.shape[2])
+            lin.weight.data = w[i].detach().T.clone().cpu()
+            lin.bias.data = b[i, 0].detach().clone().cpu()
+            layers.append(lin)
+            if j < len(self.weights) - 1:
+                layers += [nn.ReLU(), nn.Dropout(DROPOUT)]
+        return nn.Sequential(*layers)
 
 
-def train_model(model, train_files, train_labels, device, batch_size=32, n_epochs=20):
-    """Train MLP classifier on frozen embeddings."""
-    print(f"  Extracting embeddings: {len(train_files)} files")
-
-    embeddings = []
-    for i, file_path in enumerate(train_files):
-        if (i + 1) % 50 == 0:
-            print(f"    Progress: {i + 1}/{len(train_files)}")
-        emb = model.extract_embeddings(file_path)
-        embeddings.append(emb.flatten())
-
-    embeddings_tensor = torch.stack(embeddings).to(device)
-    labels_tensor = torch.tensor(train_labels, dtype=torch.long).to(device)
-
-    print(f"  Training classifier: {embeddings_tensor.shape}")
-
-    embedding_dim = embeddings_tensor.shape[1]
-    classifier = nn.Sequential(
-        nn.Linear(embedding_dim, 256),
-        nn.ReLU(),
-        nn.Dropout(0.3),
-        nn.Linear(256, 64),
-        nn.ReLU(),
-        nn.Dropout(0.3),
-        nn.Linear(64, 2),
-    ).to(device)
-
-    dataset = TensorDataset(embeddings_tensor, labels_tensor)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(classifier.parameters(), lr=0.001)
-
-    classifier.train()
-    for epoch in range(n_epochs):
-        epoch_loss = 0.0
-        for features, labels in dataloader:
-            optimizer.zero_grad()
-            outputs = classifier(features)
-            loss = criterion(outputs, labels)
+def train_heads(X: torch.Tensor, rows: list[list[int]], labels: list[list[int]], *, n_classes: int = 2,
+                batch_size: int = 32, n_epochs: int = 20, lr: float = 1e-3, seed: int = 0) -> HeadEnsemble:
+    """Train one head per (rows, labels) training set; all sets must be the same length."""
+    torch.manual_seed(seed)
+    device = X.device
+    rows_t = torch.tensor(rows, device=device)
+    y_t = torch.tensor(labels, device=device)
+    n_heads, n = rows_t.shape
+    model = HeadEnsemble(n_heads, X.shape[1], n_classes).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    model.train()
+    for _ in range(n_epochs):
+        order = torch.argsort(torch.rand(n_heads, n, device=device), dim=1)
+        for idx in order.split(batch_size, dim=1):
+            xb = X[rows_t.gather(1, idx)]
+            yb = y_t.gather(1, idx)
+            logits = model(xb)
+            loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]), yb.reshape(-1), reduction="none")
+            loss = loss.view(n_heads, -1).mean(dim=1).sum()
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
-            epoch_loss += loss.item()
-
-        if epoch % 5 == 0:
-            avg_loss = epoch_loss / len(dataloader)
-            print(f"    Epoch {epoch}: loss={avg_loss:.4f}")
-
-    return classifier
+    return model.eval()
 
 
-def evaluate_model(model, test_files, test_labels, device, original_embedding_model):
-    """Evaluate classifier on test set using embeddings."""
-    model.eval()
-    predictions = []
-
-    print(f"  Evaluating: {len(test_files)} files")
-
-    with torch.no_grad():
-        for i, file_path in enumerate(test_files):
-            if (i + 1) % 50 == 0:
-                print(f"    Progress: {i + 1}/{len(test_files)}")
-
-            emb = original_embedding_model.extract_embeddings(file_path)
-            emb = emb.flatten().to(device)
-
-            outputs = model(emb.unsqueeze(0))
-            probs = torch.softmax(outputs, dim=1)[0, 1]
-            predictions.append(probs.cpu().numpy())
-
-    auc_score = roc_auc_score(test_labels, predictions)
-    print(f"  AUC: {auc_score:.4f}")
-    return auc_score
+@torch.no_grad()
+def predict_heads(model: HeadEnsemble, X: torch.Tensor, rows: list[list[int]]) -> list[np.ndarray]:
+    """Class probabilities (n_rows, n_classes) for each head on its own evaluation rows."""
+    probs = []
+    for h, r in enumerate(rows):
+        x = X[torch.tensor(r, device=X.device)].unsqueeze(0)
+        for i, (w, b) in enumerate(zip(model.weights, model.biases)):
+            x = torch.baddbmm(b[h:h + 1], x, w[h:h + 1])
+            if i < len(model.weights) - 1:
+                x = F.relu(x)
+        probs.append(torch.softmax(x[0], dim=-1).cpu().numpy())
+    return probs

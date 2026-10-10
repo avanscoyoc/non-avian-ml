@@ -3,11 +3,11 @@ authors = ["Amy Van Scoyoc <avanscoyoc@berkeley.edu>"]
 channels = ["conda-forge"]
 description = "A comparison of machine learning model performance on non-avian audio"
 name = "non-avian-ml"
-platforms = ["linux-aarch64", "osx-arm64"]
+platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
 version = "0.1.0"
 
 [dependencies]
-python = "3.10.*"
+python = "3.11.*"
 # Core ML frameworks from conda-forge (better ARM support)
 pytorch = "*"
 torchvision = "*"
@@ -20,6 +20,7 @@ seaborn = "*"
 pyyaml = "*"
 tqdm = "*"
 pip = "*"
+setuptools = "<81"  # tensorflow_hub still imports pkg_resources
 nodejs = ">=20"
 
 [tasks]
@@ -30,8 +31,21 @@ myst-start = { cmd = "myst start", depends-on = ["myst-install"] }
 [pypi-dependencies]
 tensorflow = ">=2.15.0"
 tensorflow_hub = "*"
-timm = "*"
-birdnetlib = "*"
 ai-edge-litert = "*"
 soundfile = "*"
-setuptools = "<81"
+birdnet = { version = "==1.1.1", extras = ["pt"] }
+
+# GPU environment for the cirrus server (x86_64 + NVIDIA). PyTorch models and all
+# classifier heads run on CUDA; TensorFlow/TFLite models stay on the CPU.
+#   pixi install -e gpu
+#   pixi run -e gpu python main.py
+[feature.gpu]
+platforms = ["linux-64"]
+system-requirements = { cuda = "12" }
+
+[feature.gpu.dependencies]
+pytorch-gpu = "*"
+cuda-version = "12.*"
+
+[environments]
+gpu = ["gpu"]

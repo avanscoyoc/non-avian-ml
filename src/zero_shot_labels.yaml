@@ -1,0 +1,90 @@
+# Zero-shot (N=0) label mapping: for each class and model, the model's OWN output label(s) for that
+# class. The zero-shot score of a clip is the max over the listed labels; AUC is on the test set.
+#
+# `mapping`    : used by main.py for the N=0 point (direct matches: same species, or a sound class
+#                that names the class).
+# `candidates` : looser matches, reported by scripts/zero_shot_label_check.py but NOT used. Move a
+#                list into `mapping` only if you decide it is a fair a-priori match.
+#
+# Labels match the model's full label string or its scientific-name part (before "_").
+# BirdNET 3.0 has no yellow-legged frog species and no non-biological classes; Perch v8 and ResNet
+# have no relevant labels. Review with: pixi run python scripts/zero_shot_label_check.py
+
+mapping:
+  american_bullfrog:
+    birdnet: [Lithobates catesbeianus]
+    birdnet3: [Lithobates catesbeianus]
+    perch2: [Lithobates catesbeianus]
+    cnn14: [Frog, Croak]
+  pacific_chorus_frog:
+    birdnet3: [Hyliola regilla]
+    perch2: [Pseudacris regilla]
+    cnn14: [Frog, Croak]
+  woodhouses_toad:
+    birdnet: [Anaxyrus woodhousii]
+    birdnet3: [Anaxyrus woodhousii]
+    perch2: [Anaxyrus woodhousii]
+    cnn14: [Frog, Croak]
+  yellow_legged_frog:
+    perch2: [Rana boylii]
+    cnn14: [Frog, Croak]
+  field_cricket:  # species unknown: any Gryllus field cricket the model knows
+    birdnet: [Gryllus *]
+    birdnet3: [Gryllus *]
+    perch2: [Gryllus *]
+    cnn14: [Cricket]
+  coyote:
+    birdnet: [Canis latrans]
+    birdnet3: [Canis latrans]
+    perch2: [Canis latrans]
+    cnn14: [Howl, Yip]
+  nutria:
+    birdnet3: [Myocastor coypus]
+    perch2: [Myocastor coypus]
+  human_vocal:
+    birdnet: [Human vocal]
+    birdnet3: [Homo sapiens]
+    perch2: [Speech, Human_voice, Homo sapiens]
+    cnn14: [Speech]
+  engine:
+    birdnet: [Engine]
+    perch2: [Engine, Idling]
+    cnn14: [Engine, Idling]
+  traffic:
+    perch2: [Traffic_noise_and_roadway_noise]
+    cnn14: ["Traffic noise, roadway noise"]
+  power_tools:
+    birdnet: [Power tools]
+    perch2: [Power_tool, Drill]
+    cnn14: [Power tool, Drill]
+  wind:
+    perch2: [Wind]
+    cnn14: [Wind, Wind noise (microphone)]
+  device_static:
+    cnn14: [Static]
+
+candidates:
+  yellow_legged_frog:
+    birdnet3: [Ranidae]
+  pacific_chorus_frog:
+    birdnet3: [Hylidae]
+  field_cricket:
+    perch2: [Cricket]
+  nutria:
+    cnn14: ["Rodents, rats, mice"]
+  coyote:
+    cnn14: ["Canidae, dogs, wolves"]
+  traffic:
+    birdnet: [Engine]
+    perch2: [Vehicle, Motor_vehicle_(road), Car_passing_by]
+    cnn14: [Vehicle, Car passing by]
+  generator:
+    birdnet: [Engine]
+    perch2: [Engine, Idling, Mechanical_fan]
+    cnn14: [Engine, Idling, Mechanical fan, Hum]
+  wind:
+    birdnet: [Environmental]
+  device_static:
+    birdnet: [Noise]
+    perch2: [Hiss]
+    cnn14: [White noise, Noise, Hiss]

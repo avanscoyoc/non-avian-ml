@@ -1,6 +1,15 @@
 import yaml
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Dict, Optional
+
+from src.paths import CLIPS_CSV, DATA, RESULTS, resolve
+from src.data_loader import Partition, make_partition
+
+DEFAULT_GROUPS = {
+    "anuran": ["pacific_chorus_frog", "woodhouses_toad", "yellow_legged_frog", "american_bullfrog"],
+    "nonbiotic": ["engine", "generator", "traffic", "device_static", "wind", "power_tools"],
+}
 
 
 @dataclass
@@ -8,15 +17,20 @@ class Config:
     models: List[str]
     species: List[str]
     training_sizes: Optional[List[int]] = None
-    n_folds: int = 5
     n_epochs: int = 20
     test_size_per_class: int = 50
     batch_size: int = 32
     random_seeds: List[int] = None
-    kfold_seed: int = 42
-    data_path: str = "/workspaces/non-avian-ml/data"
-    results_path: str = "/workspaces/non-avian-ml/results"
-    datatype: str = "data"
+    split_seed: int = 1
+    max_test_recording_clips: int = 25
+    min_train_clips: int = 40
+    donor_test_fraction: float = 0.2
+    multiclass_groups: Dict[str, List[str]] = field(default_factory=lambda: dict(DEFAULT_GROUPS))
+    multiclass_train_size: int = 80
+    data_path: Path = DATA
+    clips_csv: Path = CLIPS_CSV
+    results_path: Path = RESULTS
+    embeddings_path: Path = RESULTS / "embeddings"
     save_classifier: bool = False
     species_sizes: Optional[Dict[str, Dict[str, int]]] = None
     run_zeroshot: bool = True
@@ -29,20 +43,35 @@ def load_config(config_path: str = "config.yaml") -> Config:
     exp = data["experiments"][0]
     species_sizes = exp.get("species_sizes", None)
     species = exp.get("species", list(species_sizes.keys()) if species_sizes else [])
+    data_path = resolve(exp.get("data_path", DATA))
+    results_path = resolve(exp.get("results_path", RESULTS))
     return Config(
         models=exp["models"],
         species=species,
         training_sizes=exp.get("training_sizes", None),
-        n_folds=exp.get("n_folds", 5),
         n_epochs=exp.get("n_epochs", 20),
         test_size_per_class=exp.get("test_size_per_class", 50),
         batch_size=exp.get("batch_size", 32),
         random_seeds=exp.get("random_seeds", [42]),
-        kfold_seed=exp.get("kfold_seed", 42),
-        data_path=exp.get("data_path", "/workspaces/non-avian-ml/data"),
-        results_path=exp.get("results_path", "/workspaces/non-avian-ml/results"),
-        datatype=exp.get("datatype", "data"),
+        split_seed=exp.get("split_seed", exp.get("kfold_seed", 1)),
+        max_test_recording_clips=exp.get("max_test_recording_clips", 25),
+        min_train_clips=exp.get("min_train_clips", 40),
+        donor_test_fraction=exp.get("donor_test_fraction", 0.2),
+        multiclass_groups=exp.get("multiclass_groups", dict(DEFAULT_GROUPS)),
+        multiclass_train_size=exp.get("multiclass_train_size", 80),
+        data_path=data_path,
+        clips_csv=resolve(exp.get("clips_csv", data_path / CLIPS_CSV.name)),
+        results_path=results_path,
+        embeddings_path=resolve(exp.get("embeddings_path", results_path / "embeddings")),
         save_classifier=exp.get("save_classifier", False),
         species_sizes=species_sizes,
         run_zeroshot=exp.get("run_zeroshot", True),
     )
+
+
+def build_partition(manifest, cfg: Config) -> Partition:
+    """The single test/train partition shared by every experiment (see make_partition)."""
+    group_classes = {c for classes in cfg.multiclass_groups.values() for c in classes}
+    min_train = {c: cfg.multiclass_train_size if c in group_classes else cfg.min_train_clips for c in cfg.species}
+    return make_partition(manifest, cfg.species, cfg.test_size_per_class, cfg.split_seed,
+                          cfg.max_test_recording_clips, min_train, cfg.donor_test_fraction)

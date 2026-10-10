@@ -1,37 +1,227 @@
 import random
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
-import torch
-import torchaudio
-import torchaudio.transforms as T
-from sklearn.model_selection import StratifiedKFold
+
+import librosa
+import numpy as np
+import pandas as pd
+import soundfile as sf
+
+CLIP_SECONDS = 3.0
 
 
-def create_train_test_split(data_path, species, datatype, test_size_per_class, seed=42):
-    """Create fixed train/test split with deterministic file selection."""
-    species_path = Path(data_path) / species / datatype
-    all_pos = sorted([str(f) for f in (species_path / "pos").glob("*.wav")])
-    all_neg = sorted([str(f) for f in (species_path / "neg").glob("*.wav")])
+# ── Manifest and data checks ──────────────────────────────────────────────────
 
-    if len(all_pos) < test_size_per_class:
-        raise ValueError(
-            f"{species}: insufficient pos files (need {test_size_per_class}, have {len(all_pos)})"
-        )
-    if len(all_neg) < test_size_per_class:
-        raise ValueError(
-            f"{species}: insufficient neg files (need {test_size_per_class}, have {len(all_neg)})"
-        )
+def load_manifest(csv_path) -> pd.DataFrame:
+    """One row per clip: class folder name, filename and source recording."""
+    df = pd.read_csv(csv_path)
+    return pd.DataFrame({
+        "cls": df["common_name"],
+        "filename": df["filename"],
+        "source": df["source_audio_path"],
+    })
 
+
+def clip_path(data_path, cls: str, filename: str) -> Path:
+    return Path(data_path) / cls / filename
+
+
+def check_data(manifest: pd.DataFrame, data_path) -> tuple[list[str], list[str]]:
+    """Every manifest clip exists, and nothing else is in the class folders.
+
+    Returns (problems, notes). Clips that are not exactly 3.000 s are only a note: the loaders
+    centre-crop or zero-pad every clip to 3 s (a few clips end early because the source recording does).
+    """
+    data_path = Path(data_path)
+    problems, notes = [], []
+    if manifest.filename.duplicated().any():
+        problems.append(f"duplicate filenames in manifest: {manifest.filename[manifest.filename.duplicated()].tolist()[:5]}")
+
+    expected = set(zip(manifest.cls, manifest.filename))
+    missing = Counter(cls for cls, fn in expected if not clip_path(data_path, cls, fn).is_file())
+    if missing:
+        problems.append(f"{sum(missing.values())} clips missing: " + ", ".join(f"{c} {n}" for c, n in sorted(missing.items())))
+
+    extra = Counter(
+        d.name for d in data_path.iterdir() if d.is_dir()
+        for f in d.glob("*.wav") if (d.name, f.name) not in expected
+    )
+    if extra:
+        problems.append(f"{sum(extra.values())} wav files not in manifest: " + ", ".join(f"{c} {n}" for c, n in sorted(extra.items())))
+
+    off_length = []
+    for cls, fn in sorted(expected):
+        p = clip_path(data_path, cls, fn)
+        if p.is_file():
+            info = sf.info(str(p))
+            if abs(info.frames - CLIP_SECONDS * info.samplerate) > 1:
+                off_length.append(f"{cls}/{fn} {info.duration:.3f}s")
+    if off_length:
+        notes.append(f"{len(off_length)} clips not exactly {CLIP_SECONDS:.0f} s (padded/cropped to 3 s): {', '.join(off_length)}")
+    return problems, notes
+
+
+# ── Audio ─────────────────────────────────────────────────────────────────────
+
+def load_clip(path, sr: int, seconds: float = CLIP_SECONDS) -> np.ndarray:
+    """Mono float32 at `sr`, centre-cropped or end-padded to exactly `seconds`."""
+    y, _ = librosa.load(str(path), sr=sr, mono=True)
+    n = int(round(sr * seconds))
+    if len(y) > n:
+        start = (len(y) - n) // 2
+        y = y[start:start + n]
+    elif len(y) < n:
+        y = np.pad(y, (0, n - len(y)))
+    return y.astype(np.float32)
+
+
+def centre_pad(y: np.ndarray, sr: int, seconds: float) -> np.ndarray:
+    """Pad with equal silence on both sides (3 s -> 5 s adds 1 s each side, as data_5s did)."""
+    extra = int(round(sr * seconds)) - len(y)
+    if extra <= 0:
+        return y
+    return np.pad(y, (extra // 2, extra - extra // 2))
+
+
+# ── One shared train/test partition by source recording ───────────────────────
+
+@dataclass
+class Partition:
+    """Every source recording is either test or training, for every class and every experiment."""
+    test_recordings: set
+    test_clips: dict[str, list[str]]   # per class: the fixed held-out clips (<= test_size for experiment classes)
+    train_clips: dict[str, list[str]]  # per class: all clips from training recordings
+    source: dict[str, str]             # filename -> source recording
+
+
+def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int = 50, seed: int = 1,
+                   max_test_recording_clips: int = 25, min_train: dict[str, int] | None = None,
+                   donor_test_fraction: float = 0.2) -> Partition:
+    """Hold out whole recordings once, shared by the binary and multiclass experiments.
+
+    Experiment classes (scarcest first) get recordings moved to the test set, in seeded random order,
+    until they have `test_size` test clips: recordings with <= `max_test_recording_clips` clips first,
+    larger ones only if still short. A recording is only moved if every experiment class it contains
+    keeps at least `min_train[cls]` training clips (recordings can hold several classes). Donor-only
+    classes with >= 2 recordings get ~`donor_test_fraction` of their clips held out, so test negatives
+    stay balanced across donors.
+    """
     rng = random.Random(seed)
-    rng.shuffle(all_pos)
-    rng.shuffle(all_neg)
+    min_train = min_train or {}
+    size = manifest.groupby("source").size()
+    per_rec = {rec: g.cls.value_counts().to_dict() for rec, g in manifest.groupby("source")}
+    total = manifest.cls.value_counts().to_dict()
+    n_test = {c: 0 for c in total}
+    n_train = dict(total)
+    test = set()
 
-    test_pos = all_pos[:test_size_per_class]
-    train_pos = all_pos[test_size_per_class:]
-    test_neg = all_neg[:test_size_per_class]
-    train_neg = all_neg[test_size_per_class:]
+    def safe(rec):
+        return all(n_train[c] - k >= min(min_train.get(c, 0), n_train[c])
+                   for c, k in per_rec[rec].items() if c in classes)
 
-    return train_pos, train_neg, test_pos, test_neg
+    def hold_out(rec):
+        test.add(rec)
+        for c, k in per_rec[rec].items():
+            n_test[c] += k
+            n_train[c] -= k
 
+    for c in sorted(classes, key=lambda c: (total[c], c)):
+        recs = sorted(manifest[manifest.cls == c].source.unique())
+        rng.shuffle(recs)
+        for rec in recs:  # small recordings first
+            if n_test[c] >= test_size:
+                break
+            if rec not in test and size[rec] <= max_test_recording_clips and safe(rec):
+                hold_out(rec)
+        for rec in sorted(recs, key=lambda r: (size[r], r)):  # larger ones only if still short
+            if n_test[c] >= test_size:
+                break
+            if rec not in test and safe(rec):
+                hold_out(rec)
+
+    for c in sorted(set(total) - set(classes)):
+        recs = sorted(manifest[manifest.cls == c].source.unique())
+        if len(recs) < 2:
+            continue
+        rng.shuffle(recs)
+        for rec in recs:
+            if n_test[c] >= donor_test_fraction * total[c]:
+                break
+            if rec not in test and safe(rec):
+                hold_out(rec)
+
+    in_test = manifest.source.isin(test)
+    test_clips, train_clips = {}, {}
+    for c, g in manifest.groupby("cls"):
+        held = sorted(g.filename[in_test[g.index]])
+        test_clips[c] = sorted(rng.sample(held, min(test_size, len(held)))) if c in classes else held
+        train_clips[c] = sorted(g.filename[~in_test[g.index]])
+    return Partition(test, test_clips, train_clips, dict(zip(manifest.filename, manifest.source)))
+
+
+@dataclass
+class Split:
+    """Binary task for one target class, derived from the shared partition."""
+    target: str
+    train_pos: list[str]
+    train_neg: list[str]
+    test_pos: list[str]
+    test_neg: list[str]
+    n_test_recordings: int
+
+    @property
+    def max_n(self) -> int:
+        return min(len(self.train_pos), len(self.train_neg))
+
+
+def _quotas(available: dict[str, int], n: int) -> dict[str, int]:
+    """Equal quota per donor class; shortfalls go to the largest pools (build_negatives rule)."""
+    quota = {d: 0 for d in available}
+    remaining = n
+    active = [d for d in sorted(available) if available[d] > 0]
+    while remaining > 0 and active:
+        share, extra = divmod(remaining, len(active))
+        for i, d in enumerate(sorted(active, key=lambda d: (-available[d], d))):
+            take = min(share + (i < extra), available[d] - quota[d])
+            quota[d] += take
+            remaining -= take
+        active = [d for d in active if quota[d] < available[d]]
+    return quota
+
+
+def _balanced_sample(pools: dict[str, list[str]], n: int, rng: random.Random) -> list[str]:
+    quota = _quotas({d: len(v) for d, v in pools.items()}, n)
+    return sorted(f for d in sorted(quota) for f in rng.sample(pools[d], quota[d]))
+
+
+def binary_split(partition: Partition, target: str, seed: int = 1) -> Split:
+    """1:1 binary task: the target's held-out clips vs an equal number of other classes' held-out clips
+    (equal quota per class); training pools from training recordings only, negatives as many as positives."""
+    rng = random.Random(f"{seed}-{target}")
+    test_pos = partition.test_clips[target]
+    test_neg = _balanced_sample({d: v for d, v in partition.test_clips.items() if d != target}, len(test_pos), rng)
+    train_pos = partition.train_clips[target]
+    train_neg = _balanced_sample({d: v for d, v in partition.train_clips.items() if d != target}, len(train_pos), rng)
+
+    test_recs = {partition.source[f] for f in test_pos + test_neg}
+    assert not test_recs & {partition.source[f] for f in train_pos + train_neg}, f"{target}: recording overlap"
+    assert not test_recs - partition.test_recordings, f"{target}: test clip outside the test recordings"
+    return Split(target, train_pos, train_neg, test_pos, test_neg, len(test_recs))
+
+
+def print_split_audit(partition: Partition, splits: dict[str, Split], training_sizes: list[int]) -> None:
+    n_recs = len(set(partition.source.values()))
+    print(f"Shared partition: {len(partition.test_recordings)} test / {n_recs - len(partition.test_recordings)} "
+          f"training recordings (of {n_recs})")
+    print(f"{'class':22s} {'test pos/neg':>12s} {'test recs':>9s} {'train pos/neg':>13s} {'max N':>6s}")
+    for sp, s in splits.items():
+        feasible = [n for n in training_sizes if n <= s.max_n]
+        print(f"{sp:22s} {len(s.test_pos):>6d}/{len(s.test_neg):<5d} {s.n_test_recordings:>9d} "
+              f"{len(s.train_pos):>6d}/{len(s.train_neg):<6d} {max(feasible, default=0):>6d}")
+
+
+# ── Per-seed training draws (unchanged logic) ──────────────────────────────────
 
 def load_audio_files(training_size, train_pool_pos, train_pool_neg, random_seed=42):
     """Sample balanced training data from train pool."""
@@ -56,38 +246,3 @@ def load_audio_files(training_size, train_pool_pos, train_pool_neg, random_seed=
     files, labels = zip(*combined)
 
     return list(files), list(labels)
-
-
-def preprocess_audio(file_path: str):
-    """Convert audio to mel-spectrogram for CNN models."""
-    waveform, sr = torchaudio.load(file_path)
-    if waveform.shape[0] > 1:
-        waveform = waveform.mean(dim=0, keepdim=True)
-    if sr != 16000:
-        resampler = T.Resample(sr, 16000)
-        waveform = resampler(waveform)
-
-    mel_transform = T.MelSpectrogram(sample_rate=16000, n_mels=64)
-    db_transform = T.AmplitudeToDB()
-    mel = db_transform(mel_transform(waveform))
-
-    if mel.shape[-1] < 128:
-        pad_len = 128 - mel.shape[-1]
-        mel = torch.nn.functional.pad(mel, (0, pad_len))
-    else:
-        mel = mel[:, :, :128]
-
-    return mel
-
-
-def create_kfold_splits(files, labels, n_folds=5, seed=42):
-    """Generate stratified K-fold splits."""
-    skf = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=seed)
-
-    for train_idx, val_idx in skf.split(files, labels):
-        train_files = [files[i] for i in train_idx]
-        train_labels = [labels[i] for i in train_idx]
-        val_files = [files[i] for i in val_idx]
-        val_labels = [labels[i] for i in val_idx]
-
-        yield train_files, train_labels, val_files, val_labels

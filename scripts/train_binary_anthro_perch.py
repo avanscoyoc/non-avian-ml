@@ -2,7 +2,7 @@
 train_binary_anthro_perch.py
 
 Binary Perch classifier: anthropogenic (pos=1) vs natural (neg=0).
-- Uses ALL available .wav files from each species' data_5s/pos/ directory.
+- Uses ALL available .wav files from each class folder in data/ (3 s clips, centre-padded to 5 s for Perch).
 - Straight 80/20 train/test split, no k-fold, no per-class subsampling.
 - CrossEntropyLoss with inverse-frequency class weights.
 
@@ -26,6 +26,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
 from src.model_loader import PerchModel
+from src.paths import DATA, FIGS, MODELS, RESULTS
 from src.results import save_classifier_bundle
 
 # ---------------------------------------------------------------------------
@@ -60,10 +61,9 @@ NATURAL = [
     "thunder",
 ]
 
-DATA_PATH    = Path("/workspaces/non-avian-ml/data")
-MODEL_PATH   = Path("/workspaces/non-avian-ml/models/perch_8")
-RESULTS_PATH = Path("/workspaces/non-avian-ml/results")
-DATATYPE     = "data_5s"
+DATA_PATH    = DATA
+MODEL_PATH   = MODELS / "perch_8"
+RESULTS_PATH = RESULTS
 SEED         = 1
 BATCH_SIZE   = 32
 N_EPOCHS     = 20
@@ -72,10 +72,10 @@ N_EPOCHS     = 20
 # Data helpers
 # ---------------------------------------------------------------------------
 
-def gather_files(species_list: list[str], label: int, datatype: str) -> tuple[list[str], list[int]]:
+def gather_files(species_list: list[str], label: int) -> tuple[list[str], list[int]]:
     files = []
     for sp in species_list:
-        pos_dir = DATA_PATH / sp / datatype / "pos"
+        pos_dir = DATA_PATH / sp
         wavs = sorted(pos_dir.glob("*.wav"))
         if not wavs:
             print(f"  WARNING: no .wav files found in {pos_dir}")
@@ -235,8 +235,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}\n")
 
-    pos_files, pos_labels = gather_files(ANTHROPOGENIC, label=1, datatype=DATATYPE)
-    neg_files, neg_labels = gather_files(NATURAL,       label=0, datatype=DATATYPE)
+    pos_files, pos_labels = gather_files(ANTHROPOGENIC, label=1)
+    neg_files, neg_labels = gather_files(NATURAL,       label=0)
 
     all_files  = pos_files + neg_files
     all_labels = pos_labels + neg_labels
@@ -267,7 +267,7 @@ def main():
     print("\nEvaluating on test set...")
     auc, cm = evaluate(classifier, test_embs, test_labels, device)
 
-    figs_path = RESULTS_PATH.parent / "figs"
+    figs_path = FIGS
     plot_confusion_matrix(cm, figs_path / "confusion_matrix_binary_anthro_perch.png")
 
     print("\nSaving classifier bundle...")

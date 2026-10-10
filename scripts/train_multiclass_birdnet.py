@@ -35,6 +35,7 @@ from sklearn.metrics import (
 )
 
 from src.model_loader import BirdNETModel
+from src.paths import DATA, FIGS, MODELS, RESULTS
 from src.results import save_classifier_bundle
 
 # ---------------------------------------------------------------------------
@@ -58,10 +59,9 @@ GROUPS = {
     ],
 }
 
-DATA_PATH    = Path("/workspaces/non-avian-ml/data")
-MODEL_PATH   = Path("/workspaces/non-avian-ml/models/birdnet_2.4/BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite")
-RESULTS_PATH = Path("/workspaces/non-avian-ml/results")
-DATATYPE     = "data"
+DATA_PATH    = DATA
+MODEL_PATH   = MODELS / "birdnet_2.4" / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
+RESULTS_PATH = RESULTS
 N_TRAIN      = 80
 N_TEST       = 50
 SPLIT_SEED   = 42
@@ -77,7 +77,7 @@ def make_split(classes: list[str]) -> tuple[dict, dict]:
     """Deterministic recording-level train/test split (SPLIT_SEED)."""
     test_by_class, pool_by_class = {}, {}
     for cls in classes:
-        pos = sorted((DATA_PATH / cls / DATATYPE / "pos").glob("*.wav"))
+        pos = sorted((DATA_PATH / cls).glob("*.wav"))
         if len(pos) < N_TEST + N_TRAIN:
             raise ValueError(f"{cls}: {len(pos)} clips, need >= {N_TEST + N_TRAIN}")
         rng = random.Random(SPLIT_SEED)
@@ -244,7 +244,7 @@ def run_group(group: str, classes: list[str], birdnet: BirdNETModel, device):
     print("\n  Evaluating on test set...")
     metrics = evaluate_classifier(clf, test_embs, test_labels, classes, device)
 
-    figs_path = RESULTS_PATH.parent / "figs"
+    figs_path = FIGS
     plot_confusion_matrix(
         metrics["cm"], classes,
         figs_path / f"confusion_matrix_multiclass_{group}_birdnet.png",

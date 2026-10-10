@@ -1,156 +1,160 @@
-from pathlib import Path
-from src.config import load_config
-from src.data_loader import (
-    load_audio_files,
-    create_kfold_splits,
-    create_train_test_split,
+"""Training-size experiment: frozen embeddings + MLP heads on a test set held out by source recording.
+
+One train/test partition by recording is shared with the multiclass experiment. For each model, every
+clip's embedding is computed once and cached; then for each class, training size N and seed, a head is
+trained on N positive + N negative clips drawn from the training recordings and scored on the class's
+fixed test clips (all seeds for a size are trained at once). The 10 seeds give the mean and 95% CI.
+Zero-shot (N=0) uses the model's own label scores.
+
+Usage:
+    pixi run python main.py                       # laptop (CPU)
+    pixi run -e gpu python main.py                # cirrus (PyTorch models + heads on GPU)
+    pixi run python main.py --config my.yaml      # another config
+
+    # cirrus: TensorFlow models (CPU) and PyTorch models (GPU) as two parallel jobs
+    pixi run -e gpu python main.py --models birdnet perch perch2
+    pixi run -e gpu python main.py --models birdnet3 cnn14 resnet
+"""
+import argparse
+import sys
+import time
+
+import numpy as np
+import torch
+from sklearn.metrics import roc_auc_score
+
+from src.paths import FIGS, ROOT
+from src.config import build_partition, load_config
+from src.data_loader import binary_split, check_data, load_audio_files, load_manifest, print_split_audit
+from src.embeddings import get_embeddings
+from src.model_loader import MODEL_NAMES, torch_device
+from src.trainer import predict_heads, train_heads
+from src.zero_shot import load_label_map, match_labels, zero_shot_scores
+from src.results import (
+    aggregate_results, plot_species_models, save_classifier_bundle, save_predictions, save_results, save_runs,
 )
-from src.model_loader import load_model
-from src.zero_shot import evaluate_zero_shot
-from src.trainer import train_model, evaluate_model, cleanup_model
-from src.results import save_run_result, aggregate_results, save_results, plot_species_models, save_classifier_bundle
+
+
+def run_class(species, model_name, X, table, split, sizes, cfg, label_map):
+    """All training sizes x seeds (+ zero-shot) for one class and model -> (run rows, prediction rows)."""
+    test_files = split.test_pos + split.test_neg
+    test_labels = [1] * len(split.test_pos) + [0] * len(split.test_neg)
+    test_rows = table.rows(test_files)
+    base = {"species": species, "model": model_name, "n_epochs": cfg.n_epochs, "batch_size": cfg.batch_size,
+            "test_size_per_class": len(split.test_pos)}
+    rows, preds = [], []
+
+    def record(size, seed, scores):
+        preds.append({"training_size": size, "random_seed": seed, "scores": scores})
+        return roc_auc_score(test_labels, scores)
+
+    for size in sizes:
+        if size > split.max_n:
+            print(f"  {species} N={size}: skip (train pool {len(split.train_pos)} pos / {len(split.train_neg)} neg)")
+            continue
+        draws = [load_audio_files(size, split.train_pos, split.train_neg, seed) for seed in cfg.random_seeds]
+        heads = train_heads(X, [table.rows(f) for f, _ in draws], [l for _, l in draws],
+                            batch_size=cfg.batch_size, n_epochs=cfg.n_epochs, seed=size)
+        probs = predict_heads(heads, X, [test_rows] * len(draws))
+        aucs = [record(size, seed, p[:, 1]) for seed, p in zip(cfg.random_seeds, probs)]
+        for k, seed in enumerate(cfg.random_seeds):
+            rows.append({**base, "training_size": size, "random_seed": seed, "test_auc": aucs[k]})
+            if cfg.save_classifier:
+                save_classifier_bundle(
+                    classifier=heads.head(k), embedding_model=None, model_name=model_name, species=species,
+                    training_size=size, random_seed=seed, test_auc=aucs[k], n_epochs=cfg.n_epochs,
+                    results_path=cfg.results_path,
+                )
+        print(f"  {species:20s} N={size:<4d} test AUC {np.mean(aucs):.3f} ± {np.std(aucs):.3f}")
+
+    wanted = label_map.get(species, {}).get(model_name)
+    if cfg.run_zeroshot and wanted and table.labels:
+        scores = zero_shot_scores(np.asarray(table.scores)[test_rows], match_labels(table.labels, wanted))
+        auc = record(0, 0, scores)
+        rows.append({**base, "training_size": 0, "n_epochs": 0, "random_seed": 0, "test_auc": auc})
+        print(f"  {species:20s} zero-shot ({', '.join(wanted)}): test AUC {auc:.3f}")
+
+    pred_rows = [{"species": species, "model": model_name, "training_size": p["training_size"],
+                  "random_seed": p["random_seed"], "filename": f, "label": y, "score": float(s)}
+                 for p in preds for f, y, s in zip(test_files, test_labels, p["scores"])]
+    return rows, pred_rows
 
 
 def main():
-    config_path = Path(__file__).parent / "src" / "config.yaml"
-    config = load_config(str(config_path))
-    Path(config.results_path).mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", default=str(ROOT / "src" / "config.yaml"))
+    parser.add_argument("--models", nargs="+", help="Run only these models (default: all in the config). "
+                        "Lets CPU (TensorFlow) and GPU (PyTorch) models run as two parallel jobs.")
+    parser.add_argument("--species", nargs="+", help="Run only these classes (the partition is still built "
+                        "from every class in the config, so test sets are unchanged).")
+    args = parser.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)  # keep nohup/redirected logs complete
+    cfg = load_config(args.config)
+    if args.models:
+        unknown = set(args.models) - set(MODEL_NAMES)
+        if unknown:
+            parser.error(f"unknown models {sorted(unknown)}; choose from {MODEL_NAMES}")
+        cfg.models = args.models
 
-    for species in config.species:
-        print(f"\n{'=' * 80}\nSpecies: {species}\n{'=' * 80}")
+    manifest = load_manifest(cfg.clips_csv)
+    problems, notes = check_data(manifest, cfg.data_path)
+    for note in notes:
+        print(f"Note: {note}")
+    if problems:
+        print(f"Data check failed for {cfg.data_path}:")
+        for p in problems:
+            print(f"  - {p}")
+        sys.exit(1)
 
-        if config.species_sizes and species in config.species_sizes:
-            test_size = config.species_sizes[species]["test"]
-            training_sizes = [config.species_sizes[species]["train"]]
+    partition = build_partition(manifest, cfg)
+    if args.species and set(args.species) - set(cfg.species):
+        parser.error(f"--species must be in the config's species list: {sorted(set(args.species) - set(cfg.species))}")
+    splits, sizes = {}, {}
+    for sp in args.species or cfg.species:
+        split = binary_split(partition, sp, cfg.split_seed)
+        if not split.test_pos:
+            print(f"Skipping {sp}: no recordings could be held out for testing")
+            continue
+        splits[sp] = split
+        if cfg.species_sizes and sp in cfg.species_sizes:
+            sizes[sp] = [min(cfg.species_sizes[sp]["train"], split.max_n)]
         else:
-            test_size = config.test_size_per_class
-            training_sizes = config.training_sizes
+            sizes[sp] = cfg.training_sizes
+    print_split_audit(partition, splits, sorted({n for s in sizes.values() for n in s}))
 
-        for model_name in config.models:
-            datatype = "data_5s" if model_name == "perch" else config.datatype
+    label_map = load_label_map() if cfg.run_zeroshot else {}
+    runs_dir, preds_dir = cfg.results_path / "runs", cfg.results_path / "predictions"
+    device = torch_device()
+    cls_of = dict(zip(manifest.filename, manifest.cls))
 
-            train_pos, train_neg, test_pos, test_neg = create_train_test_split(
-                config.data_path,
-                species,
-                datatype,
-                test_size,
-                config.kfold_seed,
-            )
+    for model_name in cfg.models:
+        todo = [sp for sp in splits if not (runs_dir / f"{sp}_{model_name}.csv").exists()]
+        if not todo:
+            print(f"\n[{model_name}] all classes done (delete results/runs/*_{model_name}.csv to rerun)")
+            continue
+        print(f"\n{'=' * 80}\n[{model_name}] {len(todo)} classes\n{'=' * 80}")
+        start = time.time()
+        clips = {(cls_of[f], f) for sp in todo for s in [splits[sp]]
+                 for f in s.train_pos + s.train_neg + s.test_pos + s.test_neg}
+        table = get_embeddings(model_name, sorted(clips), cfg.data_path, cfg.embeddings_path)
+        X = torch.from_numpy(np.ascontiguousarray(table.emb)).to(device)
+        print(f"[{model_name}] training heads on {device}")
+        for sp in todo:
+            rows, pred_rows = run_class(sp, model_name, X, table, splits[sp], sizes[sp], cfg, label_map)
+            save_predictions(pred_rows, preds_dir, sp, model_name)
+            save_runs(rows, runs_dir, sp, model_name)  # written last: marks the class x model as done
+        del X
+        print(f"[{model_name}] done in {time.time() - start:.0f}s")
 
-            test_files = test_pos + test_neg
-            test_labels = [1] * len(test_pos) + [0] * len(test_neg)
-
-            print(f"\n[{model_name.upper()}] Test set: {len(test_pos)} pos / {len(test_neg)} neg")
-
-            for training_size in training_sizes:
-                # Pre-check: skip infeasible training sizes before touching any seeds
-                if len(train_pos) < training_size:
-                    print(f"  Training size: {training_size} per class  [SKIP: only {len(train_pos)} pos files available after test split]")
-                    continue
-                if len(train_neg) < training_size:
-                    print(f"  Training size: {training_size} per class  [SKIP: only {len(train_neg)} neg files available after test split]")
-                    continue
-
-                # Pre-check: skip if all seeds already completed
-                all_done = all(
-                    (Path(config.results_path) / f"run_{species}_{model_name}_{training_size}_{seed}.csv").exists()
-                    for seed in config.random_seeds
-                )
-                if all_done:
-                    print(f"  Training size: {training_size} per class  [SKIP: all {len(config.random_seeds)} seeds already completed]")
-                    continue
-
-                print(f"  Training size: {training_size} per class")
-
-                for random_seed in config.random_seeds:
-                    # Skip if already completed
-                    run_file = Path(config.results_path) / f"run_{species}_{model_name}_{training_size}_{random_seed}.csv"
-                    if run_file.exists():
-                        print(f"    Seed {random_seed}: Already completed (skipping)")
-                        continue
-                    
-                    try:
-                        files, labels = load_audio_files(
-                            training_size, train_pos, train_neg, random_seed
-                        )
-
-                        fold_scores = []
-                        for train_files, train_labels, val_files, val_labels in create_kfold_splits(
-                            files, labels, config.n_folds, config.kfold_seed
-                        ):
-                            model, device = load_model(model_name)
-                            trained_model = train_model(
-                                model, train_files, train_labels, device, config.batch_size, config.n_epochs
-                            )
-                            val_score = evaluate_model(
-                                trained_model, val_files, val_labels, device, model
-                            )
-                            fold_scores.append(val_score)
-                            
-                            del trained_model
-                            cleanup_model(model)
-
-                        final_model, device = load_model(model_name)
-                        final_trained = train_model(final_model, files, labels, device, config.batch_size, config.n_epochs)
-                        test_score = evaluate_model(
-                            final_trained, test_files, test_labels, device, final_model
-                        )
-
-                        # Save classifier bundle if enabled
-                        if config.save_classifier:
-                            save_classifier_bundle(
-                                classifier=final_trained,
-                                embedding_model=final_model,
-                                model_name=model_name,
-                                species=species,
-                                training_size=training_size,
-                                random_seed=random_seed,
-                                test_auc=test_score,
-                                n_epochs=config.n_epochs,
-                                results_path=config.results_path,
-                            )
-
-                        cv_mean = sum(fold_scores) / len(fold_scores)
-                        result = {
-                            "species": species,
-                            "model": model_name,
-                            "training_size": training_size,
-                            "n_folds": config.n_folds,
-                            "n_epochs": config.n_epochs,
-                            "batch_size": config.batch_size,
-                            "test_size_per_class": test_size,
-                            "random_seed": random_seed,
-                            "cv_auc_mean": cv_mean,
-                            "test_auc": test_score,
-                        }
-                        save_run_result(result, config.results_path)
-                        print(f"    Seed {random_seed}: CV AUC={cv_mean:.4f} | Test AUC={test_score:.4f}")
-                        
-                        del final_trained
-                        cleanup_model(final_model)
-                    
-                    except Exception as e:
-                        print(f"    ERROR Seed {random_seed}: {e}")
-                        continue
-
-            # Run zero-shot evaluation AFTER all training sizes/seeds complete
-            if config.run_zeroshot:
-                print(f"\n[{model_name.upper()}] Running zero-shot evaluation...")
-                evaluate_zero_shot(species, model_name, test_files, test_labels, config)
-            
-        # Aggregate all runs for this species
-        print(f"\nAggregating results for {species}...")
-        all_runs = aggregate_results(config.results_path, species)
-        if all_runs is not None:
-            output_file = f"{config.results_path}/results_{species}.csv"
-            df = save_results(all_runs.to_dict('records'), output_file)
-            print(f"Results saved: {output_file}")
-
-            figs_dir = Path(config.results_path).parent / "figs"
-            figs_dir.mkdir(parents=True, exist_ok=True)
-            plot_file = str(figs_dir / f"results_{species}_plot.png")
-            plot_species_models(df, plot_file)
-            print(f"Plot saved: {plot_file}")
+    print("\nAggregating results...")
+    FIGS.mkdir(parents=True, exist_ok=True)
+    for sp in splits:
+        all_runs = aggregate_results(runs_dir, sp)
+        if all_runs is None:
+            continue
+        df = save_results(all_runs.to_dict("records"), cfg.results_path / f"results_{sp}.csv")
+        plot_species_models(df, FIGS / f"results_{sp}_plot.png")
+    print(f"Results: {cfg.results_path}/results_*.csv | per-class plots: {FIGS}/results_*_plot.png")
 
 
 if __name__ == "__main__":

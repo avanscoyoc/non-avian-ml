@@ -4,6 +4,8 @@ experiments:
   models:
   - perch
   - birdnet
+  # train = clips per class (capped at the class's training pool); test sets come from the
+  # shared recording partition (test_size_per_class), so the `test` values are ignored.
   species_sizes:
     device_static:        {train: 1133, test: 283}
     pacific_chorus_frog:  {train: 636,  test: 159}
@@ -27,13 +29,12 @@ experiments:
     dog:                  {train: 10,   test: 2}
     water:                {train: 9,    test: 2}
     human_non_vocal:      {train: 7,    test: 1}
-  n_folds: 5
   n_epochs: 20
   batch_size: 32
   random_seeds: [1]
-  kfold_seed: 1
-  data_path: /workspaces/non-avian-ml/data
-  results_path: /workspaces/non-avian-ml/results
-  datatype: data
+  split_seed: 1
+  data_path: data
+  results_path: results/final_classifiers   # separate from the training-size runs in results/runs
+  embeddings_path: results/embeddings       # shared embedding cache
   save_classifier: true
   run_zeroshot: false

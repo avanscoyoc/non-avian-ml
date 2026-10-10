@@ -1,253 +1,148 @@
 """
 multiclass_fit.py
 
-Trains N=80-per-class multiclass MLP classifiers for two groups:
-  anuran   : 4 classes (PCF, Woodhouse's toad, yellow-legged frog, bullfrog)
-  nonbiotic: 5 classes (engine, generator, traffic, device_static, wind)
+Multiclass MLP heads for two class groups, on the same shared train/test partition as the
+training-size (binary) experiment:
+  anuran   : pacific_chorus_frog, woodhouses_toad, yellow_legged_frog, american_bullfrog
+  nonbiotic: engine, generator, traffic, device_static, wind, power_tools
+(groups and N are set in src/config.yaml: multiclass_groups, multiclass_train_size).
 
-Models: birdnet, perch  |  Seeds: 1–10  →  40 fits total
+Test set: each class's held-out clips from the shared partition, the same clips as its binary test
+positives. Training, per seed (1-10): exactly the 80 clips per class that the binary N = 80 draw used for
+that class and seed. Embeddings come from the shared cache (results/embeddings); all seeds are trained
+at once.
 
-Embeddings for each group×model are extracted ONCE (pre-seeded split), then
-train clips are resampled per seed so extraction cost is not multiplied by seeds.
+Outputs in results/experiment/ (one set per group x model):
+  multiclass_{group}_{model}.csv          per seed x class: test n, one-vs-rest AUC, precision, recall, F1, macro F1
+  cm_{group}_{model}.npy                  confusion matrices, shape (seeds, n_classes, n_classes), counts
+  test_embeddings_{group}_{model}.npz     test-clip embeddings + labels (for the t-SNE figure)
+  labels_{group}.json                     class names (index order) and test clips per class
+  multiclass_results.csv                  mean/SD over seeds per group x model x class
 
-Outputs saved to results/experiment/:
-  run_multiclass_{group}_{model}_seed{seed}.csv   per-class OVR AUC + F1
-  cm_multiclass_{group}_{model}_seed{seed}.npy    confusion matrix (counts)
-  labels_{group}.json                             class names (index order)
+Classes with no test clips get NaN metrics and an empty confusion-matrix row, instead of an error.
 
 Usage:
-    python experiment/multiclass_fit.py
-    python experiment/multiclass_fit.py --group anuran --model birdnet
+    pixi run python experiment/multiclass_fit.py
+    pixi run python experiment/multiclass_fit.py --group anuran --models birdnet perch2
 """
 
-import argparse, json, random, sys
+import argparse
+import json
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
+from sklearn.metrics import confusion_matrix, precision_recall_fscore_support, roc_auc_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.model_loader import load_model
+from src.paths import RESULTS, ROOT  # noqa: E402
+from src.config import build_partition, load_config  # noqa: E402
+from src.data_loader import binary_split, load_audio_files, load_manifest  # noqa: E402
+from src.embeddings import get_embeddings  # noqa: E402
+from src.model_loader import MODEL_NAMES, torch_device  # noqa: E402
+from src.trainer import predict_heads, train_heads  # noqa: E402
 
-# ── Fixed design ──────────────────────────────────────────────────────────────
-ANURAN    = ["pacific_chorus_frog", "woodhouses_toad", "yellow_legged_frog", "american_bullfrog"]
-NONBIOTIC = ["engine", "generator", "traffic", "device_static", "wind", "power_tools"]
-GROUPS    = {"anuran": ANURAN, "nonbiotic": NONBIOTIC}
-
-MODEL_DATATYPE = {"birdnet": "data", "perch": "data_5s"}
-
-N_TRAIN    = 80
-N_TEST     = 50
-SPLIT_SEED = 42          # fixes train/test assignment (same across models)
-SEEDS      = list(range(1, 11))
-N_EPOCHS   = 20
-BATCH_SIZE = 32
-
-ROOT         = Path(__file__).resolve().parent.parent
-DATA_PATH    = ROOT / "data"
-RESULTS_PATH = ROOT / "results" / "experiment"
+OUT = RESULTS / "experiment"
 
 
-# ── Data ─────────────────────────────────────────────────────────────────────
-
-def make_split(classes: list[str], datatype: str) -> tuple[dict, dict]:
-    """Deterministic recording-level train/test split (SPLIT_SEED).
-
-    Returns test_by_class and pool_by_class dicts mapping class name → file list.
-    """
-    test_by_class, pool_by_class = {}, {}
-    for cls in classes:
-        pos = sorted((DATA_PATH / cls / datatype / "pos").glob("*.wav"))
-        if len(pos) < N_TEST + N_TRAIN:
-            raise ValueError(
-                f"{cls}: {len(pos)} clips found, need ≥ {N_TEST + N_TRAIN}"
-            )
-        rng = random.Random(SPLIT_SEED)
-        rng.shuffle(pos)
-        test_by_class[cls] = [str(f) for f in pos[:N_TEST]]
-        pool_by_class[cls] = [str(f) for f in pos[N_TEST:]]
-    return test_by_class, pool_by_class
+def training_clips(split, n: int, seed: int) -> list[str]:
+    """The n positive clips the binary training-size run drew for this class and seed."""
+    files, labels = load_audio_files(n, split.train_pos, split.train_neg, seed)
+    return sorted(f for f, label in zip(files, labels) if label == 1)
 
 
-def extract_all(model, files: list[str]) -> torch.Tensor:
-    embs = []
-    for i, fp in enumerate(files):
-        if (i + 1) % 100 == 0:
-            print(f"      {i+1}/{len(files)}")
-        embs.append(model.extract_embeddings(fp).flatten())
-    return torch.stack(embs)
+def evaluate(probs: np.ndarray, y: np.ndarray, n_classes: int) -> dict:
+    """Metrics that stay defined when a class has no test clips (its row/metrics become empty/NaN)."""
+    preds = probs.argmax(axis=1)
+    present = sorted(set(y.tolist()))
+    cm = confusion_matrix(y, preds, labels=list(range(n_classes)))
+    auc = [roc_auc_score(y == i, probs[:, i]) if i in present and len(present) > 1 else np.nan
+           for i in range(n_classes)]
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y, preds, labels=list(range(n_classes)), zero_division=0)
+    absent = ~np.isin(np.arange(n_classes), present)
+    precision, recall, f1 = (np.where(absent, np.nan, a) for a in (precision, recall, f1))
+    return {"cm": cm, "auc": auc, "precision": precision, "recall": recall, "f1": f1,
+            "macro_f1": float(np.nanmean(f1))}
 
 
-# ── Model ─────────────────────────────────────────────────────────────────────
+def run_group_model(group, classes, model_name, partition, splits, cfg, cls_of, device):
+    test_files = [f for c in classes for f in partition.test_clips[c]]
+    y_test = np.array([i for i, c in enumerate(classes) for _ in partition.test_clips[c]])
+    n = cfg.multiclass_train_size
+    draws = []
+    for seed in cfg.random_seeds:
+        files = [f for c in classes for f in training_clips(splits[c], n, seed)]
+        labels = [i for i, c in enumerate(classes) for _ in range(n)]
+        draws.append((files, labels))
 
-def build_classifier(dim: int, n_classes: int) -> nn.Module:
-    return nn.Sequential(
-        nn.Linear(dim, 256), nn.ReLU(), nn.Dropout(0.3),
-        nn.Linear(256, 64),  nn.ReLU(), nn.Dropout(0.3),
-        nn.Linear(64, n_classes),
-    )
+    clips = {(cls_of[f], f) for f in test_files} | {(cls_of[f], f) for files, _ in draws for f in files}
+    table = get_embeddings(model_name, sorted(clips), cfg.data_path, cfg.embeddings_path)
+    X = torch.from_numpy(np.ascontiguousarray(table.emb)).to(device)
+    test_rows = table.rows(test_files)
 
+    heads = train_heads(X, [table.rows(f) for f, _ in draws], [l for _, l in draws], n_classes=len(classes),
+                        batch_size=cfg.batch_size, n_epochs=cfg.n_epochs, seed=n)
+    rows, cms = [], []
+    for seed, probs in zip(cfg.random_seeds, predict_heads(heads, X, [test_rows] * len(draws))):
+        m = evaluate(probs, y_test, len(classes))
+        cms.append(m["cm"])
+        rows += [{"group": group, "model": model_name, "seed": seed, "class_name": c, "class_idx": i,
+                  "test_n": int((y_test == i).sum()), "ovr_auc": m["auc"][i], "precision": m["precision"][i],
+                  "recall": m["recall"][i], "f1": m["f1"][i], "macro_f1": m["macro_f1"]}
+                 for i, c in enumerate(classes)]
 
-def train_classifier(
-    clf: nn.Module,
-    embs: torch.Tensor,
-    labels: list[int],
-    device: torch.device,
-) -> nn.Module:
-    labels_t = torch.tensor(labels, dtype=torch.long)
-    counts = torch.bincount(labels_t).float()
-    weights = (1.0 / counts.clamp(min=1)).to(device)
-    weights = weights / weights.sum() * len(counts)
-
-    ds     = TensorDataset(embs.to(device), labels_t.to(device))
-    loader = DataLoader(ds, batch_size=BATCH_SIZE, shuffle=True)
-    criterion = nn.CrossEntropyLoss(weight=weights)
-    opt = torch.optim.Adam(clf.parameters(), lr=1e-3)
-
-    clf.train()
-    for ep in range(N_EPOCHS):
-        total = 0.0
-        for x, y in loader:
-            opt.zero_grad()
-            loss = criterion(clf(x), y)
-            loss.backward()
-            opt.step()
-            total += loss.item()
-        if ep % 5 == 0 or ep == N_EPOCHS - 1:
-            print(f"      epoch {ep+1:>3}  loss={total/len(loader):.4f}")
-    return clf
-
-
-def evaluate_classifier(
-    clf: nn.Module,
-    embs: torch.Tensor,
-    labels: list[int],
-    label_names: list[str],
-    device: torch.device,
-) -> dict:
-    clf.eval()
-    with torch.no_grad():
-        logits = clf(embs.to(device))
-        probs  = torch.softmax(logits, dim=1).cpu().numpy()
-        preds  = logits.argmax(dim=1).cpu().numpy()
-
-    y = np.array(labels)
-    per_class_auc = roc_auc_score(y, probs, multi_class="ovr", average=None)
-    cm     = confusion_matrix(y, preds)
-    report = classification_report(y, preds, target_names=label_names, output_dict=True)
-    macro_f1 = report["macro avg"]["f1-score"]
-    print(f"      macro F1={macro_f1:.4f}  per-class AUC={per_class_auc.round(4)}")
-    return {"per_class_auc": per_class_auc, "cm": cm, "report": report}
-
-
-# ── I/O ───────────────────────────────────────────────────────────────────────
-
-def save_run(group: str, model_name: str, seed: int, label_names: list[str], metrics: dict):
-    RESULTS_PATH.mkdir(parents=True, exist_ok=True)
-
-    report   = metrics["report"]
-    macro_f1 = report["macro avg"]["f1-score"]
-    rows = [
-        {
-            "group": group,
-            "model": model_name,
-            "seed": seed,
-            "class_name": cls,
-            "class_idx": i,
-            "ovr_auc": metrics["per_class_auc"][i],
-            "precision": report[cls]["precision"],
-            "recall":    report[cls]["recall"],
-            "f1":        report[cls]["f1-score"],
-            "macro_f1":  macro_f1,
-        }
-        for i, cls in enumerate(label_names)
-    ]
-    csv_path = RESULTS_PATH / f"run_multiclass_{group}_{model_name}_seed{seed}.csv"
-    pd.DataFrame(rows).to_csv(csv_path, index=False)
-
-    np.save(RESULTS_PATH / f"cm_multiclass_{group}_{model_name}_seed{seed}.npy", metrics["cm"])
-
-    labels_path = RESULTS_PATH / f"labels_{group}.json"
-    if not labels_path.exists():
-        labels_path.write_text(json.dumps(label_names))
-
-
-# ── Main loop ─────────────────────────────────────────────────────────────────
-
-def run_group_model(group: str, classes: list[str], model_name: str):
-    print(f"\n{'='*60}")
-    print(f"  group={group}  model={model_name}")
-
-    datatype = MODEL_DATATYPE[model_name]
-    test_by_class, pool_by_class = make_split(classes, datatype)
-
-    test_files  = [f for cls in classes for f in test_by_class[cls]]
-    test_labels = [i for i, cls in enumerate(classes) for _ in test_by_class[cls]]
-
-    print(f"  Loading {model_name}...")
-    emb_model, _ = load_model(model_name)
-
-    print(f"  Extracting test embeddings ({len(test_files)} clips)...")
-    test_embs = extract_all(emb_model, test_files)
-
-    pool_embs: dict[str, torch.Tensor] = {}
-    for cls in classes:
-        print(f"  Extracting pool for {cls} ({len(pool_by_class[cls])} clips)...")
-        pool_embs[cls] = extract_all(emb_model, pool_by_class[cls])
-
-    emb_model.cleanup()
-
-    dim    = test_embs.shape[1]
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    for seed in SEEDS:
-        print(f"\n  Seed {seed}/{len(SEEDS)}")
-        rng = random.Random(seed)
-        train_parts, train_labels = [], []
-        for i, cls in enumerate(classes):
-            pool = pool_embs[cls]
-            idx  = torch.tensor(rng.sample(range(len(pool)), N_TRAIN))
-            train_parts.append(pool[idx])
-            train_labels.extend([i] * N_TRAIN)
-
-        train_embs = torch.cat(train_parts)
-        clf = build_classifier(dim, len(classes)).to(device)
-        clf = train_classifier(clf, train_embs, train_labels, device)
-        metrics = evaluate_classifier(clf, test_embs, test_labels, classes, device)
-        save_run(group, model_name, seed, classes, metrics)
+    df = pd.DataFrame(rows)
+    df.to_csv(OUT / f"multiclass_{group}_{model_name}.csv", index=False)
+    np.save(OUT / f"cm_{group}_{model_name}.npy", np.stack(cms))
+    np.savez(OUT / f"test_embeddings_{group}_{model_name}.npz", embeddings=table.emb[test_rows],
+             labels=y_test, class_names=np.array(classes))
+    print(f"  {group:9s} {model_name:8s} macro F1 {df.groupby('seed').macro_f1.first().mean():.3f} | "
+          f"OvR AUC " + ", ".join(f"{c} {df[df.class_name == c].ovr_auc.mean():.3f}" for c in classes))
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--group", choices=list(GROUPS), default=None)
-    parser.add_argument("--model", choices=list(MODEL_DATATYPE), default=None)
+    parser.add_argument("--config", default=str(ROOT / "src" / "config.yaml"))
+    parser.add_argument("--group", help="Run one group (default: all in the config).")
+    parser.add_argument("--models", nargs="+", choices=MODEL_NAMES, help="Default: all models in the config.")
     args = parser.parse_args()
+    sys.stdout.reconfigure(line_buffering=True)
 
-    groups_to_run = {args.group: GROUPS[args.group]} if args.group else GROUPS
-    models_to_run = [args.model] if args.model else list(MODEL_DATATYPE)
+    cfg = load_config(args.config)
+    groups = {args.group: cfg.multiclass_groups[args.group]} if args.group else cfg.multiclass_groups
+    models = args.models or cfg.models
+    manifest = load_manifest(cfg.clips_csv)
+    partition = build_partition(manifest, cfg)
+    cls_of = dict(zip(manifest.filename, manifest.cls))
+    device = torch_device()
+    OUT.mkdir(parents=True, exist_ok=True)
+    print(f"Groups: {list(groups)} | models: {models} | seeds: {cfg.random_seeds} | "
+          f"N = {cfg.multiclass_train_size} per class | heads on {device}")
 
-    total = sum(len(SEEDS) for _ in groups_to_run for _ in models_to_run)
-    print(f"Planned fits: {total}  (groups={list(groups_to_run)}  models={models_to_run}  seeds={SEEDS})")
+    for group, classes in groups.items():
+        splits = {c: binary_split(partition, c, cfg.split_seed) for c in classes}
+        short = {c: len(s.train_pos) for c, s in splits.items() if len(s.train_pos) < cfg.multiclass_train_size}
+        if short:
+            raise SystemExit(f"{group}: fewer than {cfg.multiclass_train_size} training clips for {short}")
+        test_n = [len(partition.test_clips[c]) for c in classes]
+        (OUT / f"labels_{group}.json").write_text(json.dumps({"classes": classes, "test_n": test_n}))
+        print(f"\n{group}: test clips per class {dict(zip(classes, test_n))}")
+        for model_name in models:
+            if (OUT / f"multiclass_{group}_{model_name}.csv").exists():
+                print(f"  {group} {model_name}: done (delete multiclass_{group}_{model_name}.csv to rerun)")
+                continue
+            run_group_model(group, classes, model_name, partition, splits, cfg, cls_of, device)
 
-    for group, classes in groups_to_run.items():
-        for model_name in models_to_run:
-            run_group_model(group, classes, model_name)
-
-    print("\nDone. Aggregating results...")
-    dfs = [pd.read_csv(p) for p in RESULTS_PATH.glob("run_multiclass_*.csv")]
+    dfs = [pd.read_csv(p) for p in sorted(OUT.glob("multiclass_*_*.csv")) if p.name != "multiclass_results.csv"]
     if dfs:
-        agg = (
-            pd.concat(dfs)
-            .groupby(["group", "model", "class_name"])[["ovr_auc", "f1", "macro_f1"]]
-            .agg(["mean", "std"])
-        )
+        agg = (pd.concat(dfs).groupby(["group", "model", "class_name"])[["ovr_auc", "f1", "macro_f1"]]
+               .agg(["mean", "std"]))
         agg.columns = ["_".join(c) for c in agg.columns]
-        agg.reset_index().to_csv(RESULTS_PATH / "multiclass_results.csv", index=False)
-        print(f"Aggregated results → {RESULTS_PATH / 'multiclass_results.csv'}")
+        agg.reset_index().to_csv(OUT / "multiclass_results.csv", index=False)
+        print(f"\nAggregated results -> {OUT / 'multiclass_results.csv'}")
 
 
 if __name__ == "__main__":
