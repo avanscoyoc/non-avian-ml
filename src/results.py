@@ -7,7 +7,7 @@ import json
 import shutil
 from datetime import datetime
 
-from src.paths import MODELS
+from src import model_files
 
 
 def save_runs(rows, runs_dir, species, model):
@@ -65,49 +65,54 @@ def save_results(results, output_path):
 
 
 def plot_species_models(df, output_path):
-    """Plot learning curves with 95% confidence intervals; zero-shot (N=0) as open markers."""
+    """Per-class learning curves: mean test AUC with a shaded 95% CI band; zero-shot (N=0) as open markers."""
+    from src.plot_style import AXIS, GRID, INK, INK_MUTED, INK_SECONDARY, MODELS
+
     species_list = df["species"].unique()
     n_species = len(species_list)
-    fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 6))
-    if n_species == 1:
-        axes = [axes]
+    fig, axes = plt.subplots(1, n_species, figsize=(6 * n_species, 5), squeeze=False)
+    axes = axes[0]
 
-    for i, species in enumerate(species_list):
+    for ax, species in zip(axes, species_list):
         species_data = df[df["species"] == species]
-        models = species_data["model"].unique()
-
-        for model in models:
-            model_data = species_data[species_data["model"] == model].sort_values("training_size")
-            trained = model_data[model_data["training_size"] > 0]
-            line = axes[i].errorbar(
-                trained["training_size"],
-                trained["test_auc_mean"],
-                yerr=trained["test_auc_ci_95"],
-                label=model.upper(),
-                marker="o",
-                capsize=5,
-                capthick=2,
-            )
-            zero = model_data[model_data["training_size"] == 0]
+        for model in [m for m in MODELS if m in set(species_data["model"])]:
+            name, color, marker = MODELS[model]
+            d = species_data[species_data["model"] == model].sort_values("training_size")
+            trained = d[d["training_size"] > 0]
+            x, y = trained["training_size"].to_numpy(), trained["test_auc_mean"].to_numpy()
+            ci = trained["test_auc_ci_95"].fillna(0).to_numpy()
+            band_x = x if len(x) > 1 else [x[0] - 2.5, x[0] + 2.5]
+            band_lo, band_hi = (y - ci, y + ci) if len(x) > 1 else ([y[0] - ci[0]] * 2, [y[0] + ci[0]] * 2)
+            ax.fill_between(band_x, band_lo, band_hi, color=color, alpha=0.15, linewidth=0, zorder=1)
+            ax.plot(x, y, color=color, marker=marker, markersize=6.5, linewidth=2, markeredgecolor="white",
+                    markeredgewidth=1.0, label=name, zorder=3)
+            zero = d[d["training_size"] == 0]
             if len(zero):
-                axes[i].plot(0, zero["test_auc_mean"].iloc[0], marker="o", mfc="none",
-                             color=line[0].get_color(), linestyle="none")
+                ax.plot(0, zero["test_auc_mean"].iloc[0], marker=marker, markersize=7.5, mfc="white", mec=color,
+                        mew=1.8, linestyle="none", zorder=4)
 
-        axes[i].set_title(f"{species.replace('_', ' ').title()}")
-        axes[i].set_xlabel("Training Size (samples per class)")
-        axes[i].set_ylabel("Test ROC-AUC")
-        axes[i].legend()
-        axes[i].grid(True, alpha=0.3)
-        axes[i].set_ylim(0, 1)
+        ax.set_title(species.replace("_", " ").title(), color=INK)
+        ax.set_xlabel("Training size (clips per class); shaded = 95% CI; open = zero-shot", color=INK)
+        ax.set_ylabel("Test ROC-AUC", color=INK)
+        ax.axhline(0.5, color=INK_MUTED, linestyle=":", linewidth=1, zorder=0)
+        ax.grid(True, color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+        ax.tick_params(colors=INK_SECONDARY)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        for side in ("left", "bottom"):
+            ax.spines[side].set_color(AXIS)
+        ax.legend(frameon=False, fontsize=9)
+        ax.set_ylim(0.2, 1.02)
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300, bbox_inches="tight")
+    plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close()
 
 
 # (model_info, preprocessing) per encoder: the layer the classifier head expects as input.
 ENCODER_INFO = {
-    "birdnet": ({"type": "birdnet", "version": "2.4", "embedding_dim": 1024,
+    "birdnet": ({"type": "birdnet", "version": "2.4 (TFLite FP32)", "embedding_dim": 1024,
                  "embedding_layer": "model/GLOBAL_AVG_POOL/Mean"},
                 {"sample_rate": 48000, "duration_s": 3.0}),
     "birdnet3": ({"type": "birdnet", "version": "3.0-preview3.1", "embedding_dim": 1280,
@@ -143,7 +148,7 @@ def save_classifier_bundle(
     """Save complete classifier bundle for deployment.
 
     The embedding model file is copied for BirdNET 2.4 and Perch v8; the other encoders are
-    public pretrained weights, so model_info.json records which model and layer to use.
+    public pretrained weights (see src/model_files.py), so model_info.json records which model and layer to use.
 
     bundle_name: override the auto-generated directory name
                  (defaults to "{species}_{model_name}_{training_size}")
@@ -167,14 +172,9 @@ def save_classifier_bundle(
     embedding_dir = bundle_dir / "embedding_model"
     embedding_dir.mkdir(exist_ok=True)
     if model_name == "birdnet":
-        shutil.copy2(MODELS / "birdnet_2.4" / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite", embedding_dir / "model.tflite")
+        shutil.copy2(model_files.birdnet_v2_4()[0], embedding_dir / "model.tflite")
     elif model_name == "perch":
-        for item in ["saved_model.pb", "variables", "assets"]:
-            src_item = MODELS / "perch_8" / item
-            if src_item.is_dir():
-                shutil.copytree(src_item, embedding_dir / item, dirs_exist_ok=True)
-            elif src_item.exists():
-                shutil.copy2(src_item, embedding_dir / item)
+        shutil.copytree(model_files.perch_v8(), embedding_dir, dirs_exist_ok=True)
 
     model_info, preprocessing = ENCODER_INFO[model_name]
     with open(embedding_dir / "model_info.json", "w") as f:

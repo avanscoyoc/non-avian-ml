@@ -26,7 +26,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score
 
 from src.model_loader import BirdNETModel
-from src.paths import DATA, FIGS, MODELS, RESULTS
+from src.paths import DATA, FIGS, RESULTS
 from src.results import save_classifier_bundle
 
 # ---------------------------------------------------------------------------
@@ -62,7 +62,6 @@ NATURAL = [
 ]
 
 DATA_PATH   = DATA
-MODEL_PATH  = MODELS / "birdnet_2.4" / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"
 RESULTS_PATH = RESULTS
 SEED        = 1
 BATCH_SIZE  = 32
@@ -250,7 +249,7 @@ def main():
     print(f"Train: {len(train_files)}  |  Test: {len(test_files)}\n")
 
     print("Loading BirdNET model...")
-    birdnet = BirdNETModel(str(MODEL_PATH))
+    birdnet = BirdNETModel()  # downloaded on first use into models/
 
     print(f"\nExtracting train embeddings ({len(train_files)} files)...")
     train_embs = extract_embeddings(birdnet, train_files)

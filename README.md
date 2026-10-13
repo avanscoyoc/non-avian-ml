@@ -14,8 +14,27 @@ allows). Each N is repeated with 10 random training draws; the curves show the m
 across those draws. N = 0 is true zero-shot: the model's own output label for the class, where it has one
 (`src/zero_shot_labels.yaml`). Each clip's embedding is computed once per model and cached.
 
-**Headline training size: N = 40.** Across the six well-sampled classes, going from N = 40 to N = 80 adds about
-0.01–0.04 test AUC depending on the model (mean +0.026); going from N = 20 to N = 80 adds about 0.05.
+**Known vs new classes.** Some classes are already in a model's own label set (e.g. BirdNET 2.4 has "Engine"
+and "Power tools"; Perch 2.0 and CNN14 know most classes through FSD50K / AudioSet), others are new to it; no model
+has a label for generator. The same adaptation method (frozen embedding + new head) is used for every class and
+model; for known classes the zero-shot point shows what the model already knows, and the curve shows what adapting
+it with your clips adds. Of the 29 known class × model pairs, the trained head's 95% CI clears the built-in label in
+13 (typically by N = 5), ties at the ceiling in 7 (wind, gun, fireworks), and stays below it in 6, mainly where the
+training clips come from only 2 recordings (power tools, human vocal): recording diversity, not clip count, limits
+adaptation. `scripts/saturation_summary.py` computes these numbers (`results/saturation_summary.csv`).
+
+**Headline training size: N = 40.** For the well-sampled classes the curves are within 0.02 of their best by
+N = 40 (median); going from N = 40 to N = 80 adds about 0.01–0.04 test AUC depending on the model.
+
+**Classifier head.** The main results use a small MLP head (Linear → 256 → 64 → 2, dropout 0.3, Adam, 20 epochs).
+A linear probe (standardised logistic regression) trained on the same embeddings, draws and test clips is
+reported as a robustness check (`scripts/head_comparison.py`): it scores 0.003–0.005 AUC lower for BirdNET 2.4,
+Perch v8 and Perch 2.0 and 0.018–0.026 lower for BirdNET 3.0, CNN14 and ResNet-18, and the top three models keep
+their order (CNN14 and ResNet-18, tied, swap places).
+
+**Window-length experiment** (`experiment/window_size.py`). BirdNET 3.0 with 3, 5 and 10 s input windows on the same
+clips (centred on the same events), to see whether longer windows help long broadband noise (device static,
+generator, wind, traffic) more than short pulsed sounds (bullfrog, field cricket, Pacific chorus frog).
 
 **Multiclass experiment** (`experiment/multiclass_fit.py`). One head for "which noise is this?", trained on
 exactly the same 40 clips per class as the binary N = 40 draws (10 random draws) and scored on the same test clips.
@@ -126,16 +145,20 @@ pixi run python scripts/zero_shot_label_check.py      # -> results/zero_shot_lab
 pixi run python main.py
 
 # 3. Saturation figures, one per class type
-pixi run python scripts/training_size_plots.py        # -> figs/artificial.png, figs/abiotic.png
+pixi run python scripts/training_size_plots.py        # -> figs/saturation_main.png, figs/saturation_low_sample.png
+pixi run python scripts/saturation_summary.py         # -> results/saturation_summary.csv (.md)
+pixi run python scripts/saturation_heatmap.py         # -> figs/saturation_summary.png
 ```
 
 Outputs: `results/runs/{class}_{model}.csv` (every random draw), `results/results_{class}.csv` (mean, SD and 95% CI
 per training size, low-sample flag), `results/predictions/{class}_{model}.csv` (every test clip's score, for
 bootstraps or paired model comparisons), `results/embeddings/{model}/` (cache), `figs/results_{class}_plot.png`.
 
-![Saturation curves for artificial noise](figs/artificial.png)
+![Saturation curves, well-sampled classes](figs/saturation_main.png)
 
-![Saturation curves for abiotic sound](figs/abiotic.png)
+![Summary: AUC at N = 40, built-in labels outlined](figs/saturation_summary.png)
+
+Low-sample classes (provisional) are in `figs/saturation_low_sample.png`.
 
 ### Running on the cirrus GPU server
 
@@ -176,6 +199,28 @@ and test-clip embeddings for the t-SNE figure. A class without test clips gets N
 
 Also: `figs/binary_vs_multiclass_auc_noise.png` (binary vs one-vs-rest AUC, same test clips) and
 `figs/tsne_embeddings_noise.png` (t-SNE of the test-clip embeddings).
+
+## Running the robustness check and the window experiment
+
+```bash
+pixi run python scripts/head_comparison.py     # linear probe vs MLP -> results/head_comparison.csv, figs/head_comparison.png
+pixi run python experiment/window_size.py      # BirdNET 3.0, 3/5/10 s -> results/windows/, figs/window_size.png
+```
+
+The window experiment reads `birdnet3_windows/` (3/5/10 s clips cut from the source recordings, centred on each
+event; see `birdnet3_windows/README.md`). It uses the same method as the main experiment, with its own split by
+recording shared by all three window lengths (25 test clips + 25 negatives per class; N = 5, 10, 20; 10 draws), so
+the comparison is paired clip-for-clip. Only clips used for testing or training are encoded (about 1,500 per window).
+
+| Class | Group | Clips (recordings) in the window set |
+|---|---|---|
+| Device static | broadband | 239 (147) |
+| Generator | broadband | 79 (28) |
+| Wind | broadband | 79 (79) |
+| Traffic | broadband | 48 (36) |
+| Bullfrog | pulsed | 378 (13) |
+| Field cricket | pulsed | 539 (103) |
+| Pacific chorus frog | pulsed | 705 (41) |
 
 ## Deployment classifiers
 

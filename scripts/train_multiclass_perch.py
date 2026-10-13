@@ -34,7 +34,7 @@ from sklearn.metrics import (
 )
 
 from src.model_loader import PerchModel
-from src.paths import DATA, FIGS, MODELS, RESULTS
+from src.paths import DATA, FIGS, RESULTS
 from src.results import save_classifier_bundle
 
 # ---------------------------------------------------------------------------
@@ -53,7 +53,6 @@ GROUPS = {
 }
 
 DATA_PATH    = DATA
-MODEL_PATH   = MODELS / "perch_8"
 RESULTS_PATH = RESULTS
 N_TRAIN      = 80
 N_TEST       = 50
@@ -275,7 +274,7 @@ def main():
     print(f"Device: {device}")
 
     print("\nLoading Perch model...")
-    perch = PerchModel(str(MODEL_PATH))
+    perch = PerchModel()  # downloaded on first use into models/
 
     for group, classes in groups_to_run.items():
         run_group(group, classes, perch, device)

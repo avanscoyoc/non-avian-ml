@@ -7,20 +7,29 @@ when available; TensorFlow/TFLite models always run on the CPU (TF is hidden fro
 import os
 import time
 import warnings
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
 import torchaudio.transforms as T
 from torchvision import models
-from torchvision.models import ResNet18_Weights, MobileNet_V2_Weights, VGG11_Weights
+from torchvision.models import ResNet18_Weights
 
-from src.paths import MODELS  # sets BIRDNET_APP_DATA before birdnet is imported
+from src import model_files  # downloads each model on first use (sets BIRDNET_APP_DATA / TORCH_HOME)
 from src.data_loader import load_clip, centre_pad
 
-MODEL_NAMES = ["birdnet", "birdnet3", "perch", "perch2", "cnn14", "resnet", "mobilenet", "vgg"]
+MODEL_NAMES = ["birdnet", "birdnet3", "perch", "perch2", "cnn14", "resnet"]
+
+# Which model file each encoder uses. The embedding cache stores this and is rebuilt if it changes,
+# so update the string whenever a model file or version changes.
+MODEL_SOURCES = {
+    "birdnet": "BirdNET 2.4, TFLite FP32 (birdnet package, Zenodo 15050749)",
+    "birdnet3": "BirdNET 3.0 preview3.1, TorchScript FP32 (birdnet package)",
+    "perch": "Perch v8, Kaggle google/bird-vocalization-classifier/TensorFlow2/8",
+    "perch2": "Perch 2.0, CPU SavedModel (birdnet package)",
+    "cnn14": "PANNs CNN14 Cnn14_mAP=0.431.pth (Zenodo 3987831)",
+    "resnet": "torchvision ResNet-18 IMAGENET1K_V1",
+}
 
 
 def torch_device() -> torch.device:
@@ -46,8 +55,10 @@ class Encoder:
     labels: list[str] | None = None  # model's own classes, if any (for zero-shot)
     device = "cpu"
 
+    clip_seconds = 3.0  # input window; clips are centre-cropped or zero-padded to this length
+
     def _load(self, path) -> np.ndarray:
-        return load_clip(path, self.sample_rate)
+        return load_clip(path, self.sample_rate, self.clip_seconds)
 
     def _forward(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
         """(batch, samples) float32 -> (embeddings, label scores or None)."""
@@ -86,9 +97,10 @@ class BirdNETModel(Encoder):
     name, sample_rate, dim, batch_size = "birdnet", 48000, 1024, 32
     EMBEDDING_TENSOR = "model/GLOBAL_AVG_POOL/Mean"
 
-    def __init__(self, model_path=MODELS / "birdnet_2.4" / "BirdNET_GLOBAL_6K_V2.4_Model_FP16.tflite"):
+    def __init__(self):
         import ai_edge_litert.interpreter as tflite
-        model_path = Path(model_path)
+        model_path, self.labels = model_files.birdnet_v2_4()
+        self.model_path = model_path
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # preserve_all_tensors "debugging" warning
             self.interpreter = tflite.Interpreter(
@@ -101,8 +113,6 @@ class BirdNETModel(Encoder):
         self.embedding_index = next(
             t["index"] for t in self.interpreter.get_tensor_details() if t["name"] == self.EMBEDDING_TENSOR
         )
-        labels_file = model_path.parent / "BirdNET_GLOBAL_6K_V2.4_Labels_af.txt"
-        self.labels = labels_file.read_text(encoding="utf8").splitlines()
 
     def _forward(self, audio):
         embs, logits = [], []
@@ -123,7 +133,7 @@ class _PaddedTFEncoder(Encoder):
     sample_rate, window_s, batch_size = 32000, 5.0, 8
 
     def _load(self, path):
-        return centre_pad(load_clip(path, self.sample_rate), self.sample_rate, self.window_s)
+        return centre_pad(load_clip(path, self.sample_rate, self.clip_seconds), self.sample_rate, self.window_s)
 
     def _call(self, batch) -> dict:
         raise NotImplementedError
@@ -141,10 +151,11 @@ class PerchModel(_PaddedTFEncoder):
     """Perch v8 (bird-vocalization-classifier, Perch 1.0 family): 1280-D embedding; bird labels only."""
     name, dim = "perch", 1280
 
-    def __init__(self, model_path=MODELS / "perch_8"):
+    def __init__(self):
         self.tf = _import_tf()
         import tensorflow_hub as hub
-        self._model = hub.load(str(model_path))
+        self.model_path = model_files.perch_v8()
+        self._model = hub.load(str(self.model_path))
         self._call = lambda x: self._model.infer_tf(x)
 
     def cleanup(self):
@@ -156,11 +167,9 @@ class Perch2Model(_PaddedTFEncoder):
     name, dim = "perch2", 1536
 
     def __init__(self):
-        from birdnet.acoustic.models.perch_v2.pb import AcousticPBDownloaderPerchV2
         self.tf = _import_tf()
-        path, labels = AcousticPBDownloaderPerchV2.get_model_path_and_labels("CPU")
-        self.labels = list(labels)
-        self._model = self.tf.saved_model.load(str(path))
+        self.model_path, self.labels = model_files.perch_v2()
+        self._model = self.tf.saved_model.load(str(self.model_path))
         fn = self._model.signatures["serving_default"]
         self._call = lambda x: fn(inputs=x)
 
@@ -190,10 +199,8 @@ class BirdNET3Model(_TorchEncoder):
 
     def __init__(self, device=None):
         super().__init__(device)
-        from birdnet.acoustic.models.v3_0.pt import AcousticPTDownloaderV3_0
-        path, labels = AcousticPTDownloaderV3_0.get_model_path_and_labels("en_us", "fp32")
-        self.labels = list(labels)
-        self.model = torch.jit.load(str(path), map_location=self.device).eval()
+        self.model_path, self.labels = model_files.birdnet_v3_0()
+        self.model = torch.jit.load(str(self.model_path), map_location=self.device).eval()
 
     @torch.inference_mode()
     def _forward(self, audio):
@@ -208,8 +215,8 @@ class CNN14Model(_TorchEncoder):
     def __init__(self, device=None):
         super().__init__(device)
         from src.cnn14 import Cnn14
-        self.model = Cnn14.from_checkpoint(MODELS / "cnn14" / "Cnn14_mAP=0.431.pth").to(self.device)
-        self.labels = pd.read_csv(MODELS / "cnn14" / "class_labels_indices.csv")["display_name"].tolist()
+        self.model_path, self.labels = model_files.cnn14()
+        self.model = Cnn14.from_checkpoint(self.model_path).to(self.device)
 
     @torch.inference_mode()
     def _forward(self, audio):
@@ -217,33 +224,20 @@ class CNN14Model(_TorchEncoder):
         return emb.cpu().numpy(), scores.cpu().numpy()
 
 
-class CNNEmbeddingModel(_TorchEncoder):
-    """ImageNet CNNs on log-mel spectrograms, fully pretrained and in eval mode.
+class ResNetModel(_TorchEncoder):
+    """ResNet-18 (ImageNet) on log-mel spectrograms, fully pretrained and in eval mode: 512-D embedding.
 
     The 16 kHz, 64-mel dB spectrogram of the whole 3-s clip is scaled per clip to [0, 1],
     repeated to 3 channels and ImageNet-normalised, so the pretrained first layer is kept.
     """
-    sample_rate = 16000
+    name, sample_rate, dim = "resnet", 16000, 512
     MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
     STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
-    def __init__(self, backbone_name: str, device=None):
+    def __init__(self, device=None):
         super().__init__(device)
-        self.name = backbone_name
-        if backbone_name == "resnet":
-            backbone = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-            backbone.fc = nn.Identity()
-            self.dim = 512
-        elif backbone_name == "mobilenet":
-            backbone = models.mobilenet_v2(weights=MobileNet_V2_Weights.IMAGENET1K_V1)
-            backbone.classifier = nn.Identity()
-            self.dim = 1280
-        elif backbone_name == "vgg":
-            backbone = models.vgg11(weights=VGG11_Weights.IMAGENET1K_V1)
-            backbone.classifier = backbone.classifier[:-1]  # pretrained fc6/fc7 -> 4096-D
-            self.dim = 4096
-        else:
-            raise ValueError(f"Unknown backbone: {backbone_name}")
+        backbone = models.resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
+        backbone.fc = nn.Identity()
         self.backbone = backbone.eval().to(self.device)
         self.melspec = nn.Sequential(T.MelSpectrogram(sample_rate=16000, n_mels=64), T.AmplitudeToDB()).to(self.device)
         self.mean, self.std = self.MEAN.to(self.device), self.STD.to(self.device)
@@ -257,8 +251,11 @@ class CNNEmbeddingModel(_TorchEncoder):
         return self.backbone((x - self.mean) / self.std).cpu().numpy(), None
 
 
-def load_model(model_name: str):
-    """Load a frozen encoder. Returns (encoder, device it runs on)."""
+def load_model(model_name: str, clip_seconds: float | None = None):
+    """Load a frozen encoder. Returns (encoder, device it runs on).
+
+    clip_seconds: input window length (default 3 s). BirdNET 3.0 accepts any length (one embedding per window).
+    """
     if model_name == "birdnet":
         model = BirdNETModel()
     elif model_name == "birdnet3":
@@ -269,9 +266,11 @@ def load_model(model_name: str):
         model = Perch2Model()
     elif model_name == "cnn14":
         model = CNN14Model()
-    elif model_name in ("resnet", "mobilenet", "vgg"):
-        model = CNNEmbeddingModel(model_name)
+    elif model_name == "resnet":
+        model = ResNetModel()
     else:
         raise ValueError(f"Unknown model: {model_name}")
-    print(f"[{model_name}] loaded on {model.device} (embedding dim {model.dim})")
+    if clip_seconds:
+        model.clip_seconds = clip_seconds
+    print(f"[{model_name}] loaded on {model.device} (embedding dim {model.dim}, {model.clip_seconds:g} s input)")
     return model, torch.device(model.device)

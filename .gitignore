@@ -11,5 +11,4 @@ test_audio
 results
 tmp
 classifiers_for_cdfw
-models/birdnet_cache
-models/cnn14
+models/

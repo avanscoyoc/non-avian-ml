@@ -9,9 +9,10 @@ MODELS = ROOT / "models"
 RESULTS = ROOT / "results"
 FIGS = ROOT / "figs"
 
-# Downloaded models (BirdNET 3.0, Perch 2.0, CNN14) live under models/ (gitignored).
-# Must be set before `birdnet` is imported, since it reads this at import time.
+# Every model is downloaded on first use into models/ (gitignored); see src/model_files.py.
+# Must be set before `birdnet` / `torch` are imported, since they read these at import time.
 os.environ.setdefault("BIRDNET_APP_DATA", str(MODELS / "birdnet_cache"))
+os.environ.setdefault("TORCH_HOME", str(MODELS / "torch"))
 
 
 def resolve(path) -> Path:
