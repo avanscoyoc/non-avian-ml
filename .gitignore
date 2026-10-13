@@ -6,6 +6,7 @@ __MACOSX
 .devcontainer/.env
 _build
 data
+birdnet3_windows
 test_audio
 results
 tmp

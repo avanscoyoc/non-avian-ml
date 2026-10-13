@@ -21,18 +21,21 @@ from src.data_loader import check_data, load_manifest  # noqa: E402
 def partition_table(manifest, cfg) -> str:
     """Markdown table: recordings and clips per class in the shared test/train partition."""
     p = build_partition(manifest, cfg)
-    lines = ["| Class | Recordings / clips | Test recordings / clips | Training recordings / clips | Max N |",
-             "|---|---|---|---|---|"]
+    types = {c: t for t, classes in cfg.class_types.items() for c in classes}
+    lines = ["| Class | Type | Recordings / clips | Test recordings / clips | Training recordings / clips | Max N |",
+             "|---|---|---|---|---|---|"]
     for c in cfg.species:
         d = manifest[manifest.cls == c]
         test_recs = {p.source[f] for f in p.test_clips[c]}
         train_recs = {p.source[f] for f in p.train_clips[c]}
         max_n = max([n for n in cfg.training_sizes if n <= len(p.train_clips[c])], default=0)
-        lines.append(f"| {c.replace('_', ' ').capitalize()} | {d.source.nunique()} / {len(d)} | "
+        name = c.replace('_', ' ').capitalize() + (" *" if c in p.low_sample else "")
+        lines.append(f"| {name} | {types.get(c, '')} | {d.source.nunique()} / {len(d)} | "
                      f"{len(test_recs)} / {len(p.test_clips[c])} | {len(train_recs)} / {len(p.train_clips[c])} | {max_n} |")
     n_recs = manifest.source.nunique()
-    lines.append(f"\n{len(p.test_recordings)} of {n_recs} recordings are test; the other "
-                 f"{n_recs - len(p.test_recordings)} are training.")
+    lines.append(f"\n\\* low sample: about half of the class's recordings are held out for testing (see README).\n"
+                 f"{len(p.test_recordings)} of {n_recs} recordings are test; the other "
+                 f"{n_recs - len(p.test_recordings)} are training (all classes, including negative-only ones).")
     return "\n".join(lines)
 
 

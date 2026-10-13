@@ -1,8 +1,7 @@
 """
 train_multiclass_perch.py
 
-Trains multiclass Perch MLP classifiers for two ecologically coherent groups:
-  anuran   : 4 anuran species
+Trains a multiclass Perch MLP classifier for the noise classes:
   nonbiotic: 6 abiotic/anthropogenic classes
 
 Matches the class definitions and train/test counts used in
@@ -11,7 +10,7 @@ Trains a single classifier (seed=1) and saves a deployable bundle.
 
 Usage:
     python scripts/train_multiclass_perch.py
-    python scripts/train_multiclass_perch.py --group anuran
+    python scripts/train_multiclass_perch.py --group nonbiotic
 """
 
 import argparse
@@ -43,12 +42,6 @@ from src.results import save_classifier_bundle
 # ---------------------------------------------------------------------------
 
 GROUPS = {
-    "anuran": [
-        "pacific_chorus_frog",
-        "woodhouses_toad",
-        "yellow_legged_frog",
-        "american_bullfrog",
-    ],
     "nonbiotic": [
         "engine",
         "generator",

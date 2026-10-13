@@ -1,6 +1,6 @@
 experiments:
 - name: final_classifiers
-  description: "Production run: trained final Perch classifiers using all available data per species, single seed, and saves classifier bundles for use."
+  description: "Production run: final classifiers for the noise classes using all available training data per class, single seed, saves classifier bundles."
   models:
   - perch
   - birdnet
@@ -8,25 +8,17 @@ experiments:
   # shared recording partition (test_size_per_class), so the `test` values are ignored.
   species_sizes:
     device_static:        {train: 1133, test: 283}
-    pacific_chorus_frog:  {train: 636,  test: 159}
-    woodhouses_toad:      {train: 511,  test: 127}
-    field_cricket:        {train: 484,  test: 121}
-    yellow_legged_frog:   {train: 349,  test: 87}
-    american_bullfrog:    {train: 337,  test: 84}
     wind:                 {train: 407,  test: 101}
-    nutria:               {train: 196,  test: 49}
     generator:            {train: 350,  test: 87}
     traffic:              {train: 238,  test: 59}
     engine:               {train: 136,  test: 34}
     power_tools:          {train: 130,  test: 32}
     human_vocal:          {train: 94,   test: 23}
-    coyote:               {train: 81,   test: 20}
     metal_clanging:       {train: 48,   test: 12}
     airplane:             {train: 42,   test: 10}
     thunder:              {train: 17,   test: 4}
     gun:                  {train: 20,   test: 4}
     fireworks:            {train: 7,    test: 1}
-    dog:                  {train: 10,   test: 2}
     water:                {train: 9,    test: 2}
     human_non_vocal:      {train: 7,    test: 1}
   n_epochs: 20

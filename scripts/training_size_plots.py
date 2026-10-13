@@ -1,12 +1,13 @@
 """
 training_size_plots.py
 
-Saturation figures (test ROC-AUC vs training size, mean ± 95% CI over seeds) for the manuscript
-groups. Zero-shot results (the model's own labels, no training) are open markers at N = 0.
+Saturation figures (test ROC-AUC vs training size, mean ± 95% CI over 10 random training draws), one
+figure per class type in src/config.yaml (figs/artificial.png, figs/abiotic.png). Zero-shot results
+(the model's own labels, no training) are open markers at N = 0; low-sample classes are marked.
 
 Usage:
-    pixi run python scripts/training_size_plots.py                 # all three groups
-    pixi run python scripts/training_size_plots.py --group pulsed
+    pixi run python scripts/training_size_plots.py                 # every class type
+    pixi run python scripts/training_size_plots.py --group abiotic
     pixi run python scripts/training_size_plots.py --species engine wind --output figs/custom.png
 """
 import argparse
@@ -21,6 +22,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.paths import FIGS, RESULTS  # noqa: E402
+from src.plot_style import MODELS  # noqa: E402
 
 plt.rcParams.update({
     'font.family': 'serif',
@@ -40,20 +42,11 @@ plt.rcParams.update({
     'lines.markersize': 6,
 })
 
-MODELS = {  # plotting order, legend name, colour
-    'birdnet': ('BirdNET 2.4', '#2E86AB'),
-    'birdnet3': ('BirdNET 3.0', '#1B4F72'),
-    'perch': ('Perch v8', '#F18F01'),
-    'perch2': ('Perch 2.0', '#C73E1D'),
-    'cnn14': ('CNN14 (AudioSet)', '#A23B72'),
-    'resnet': ('ResNet-18 (ImageNet)', '#06A77D'),
-}
-
-GROUPS = {  # manuscript figures
-    'broadband': ["device_static", "engine", "generator", "power_tools", "traffic", "wind"],
-    'pulsed': ["american_bullfrog", "pacific_chorus_frog", "woodhouses_toad", "yellow_legged_frog"],
-    'variable': ["coyote", "nutria", "human_vocal"],
-}
+def class_groups() -> dict[str, list[str]]:
+    """Figure groups = class types from src/config.yaml (artificial noise, abiotic)."""
+    from src.config import load_config
+    from src.paths import ROOT
+    return load_config(ROOT / "src" / "config.yaml").class_types
 
 
 def load_results(results_dir):
@@ -69,7 +62,7 @@ def plot_species_models_publication(df, output_path, species_list=None):
         species_list = sorted(df["species"].unique())
 
     n_species = len(species_list)
-    n_cols = 2
+    n_cols = 3 if n_species > 6 else 2
     n_rows = math.ceil(n_species / n_cols)
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows),
@@ -78,6 +71,7 @@ def plot_species_models_publication(df, output_path, species_list=None):
 
     for j in range(n_species, len(axes)):
         axes[j].set_visible(False)
+        axes[j - n_cols].xaxis.set_tick_params(labelbottom=True)  # panel above an empty slot keeps its x labels
 
     handles, labels = {}, {}
 
@@ -111,10 +105,13 @@ def plot_species_models_publication(df, output_path, species_list=None):
                         mec=color, mew=1.5, linestyle='none', alpha=0.9)
 
         test_n = species_data["test_size_per_class"].iloc[0] if len(species_data) else None
+        low = bool(species_data["low_sample"].iloc[0]) if "low_sample" in species_data and len(species_data) else False
         title = species.replace('_', ' ').title()
-        if test_n is not None and test_n != 50:
-            title += f" (test n={test_n}/class)"
-        ax.set_title(title, fontweight='semibold', pad=10)
+        if low:
+            title += f"\nlow sample (test n={test_n})"
+        elif test_n is not None and test_n != 50:
+            title += f" (test n={test_n})"
+        ax.set_title(title, fontweight='semibold', pad=10, color='#8a4b08' if low else 'black')
         ax.grid(True, alpha=0.25, linestyle='--', linewidth=0.5)
         ax.set_axisbelow(True)
         ax.set_ylim(0.2, 1.02)
@@ -146,8 +143,9 @@ def plot_species_models_publication(df, output_path, species_list=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Plot training-size saturation figures from results CSVs.")
-    parser.add_argument("--group", choices=[*GROUPS, "all"], default="all",
-                        help="Manuscript species group to plot (default: all three).")
+    groups = class_groups()
+    parser.add_argument("--group", choices=[*groups, "all"], default="all",
+                        help="Class type to plot (default: every type in src/config.yaml class_types).")
     parser.add_argument("--species", nargs="+", help="Custom species list (overrides --group).")
     parser.add_argument("--output", help="Output path for a custom --species plot.")
     parser.add_argument("--results-dir", default=str(RESULTS), help="Directory containing results_*.csv files.")
@@ -157,8 +155,8 @@ def main():
     if args.species:
         plot_species_models_publication(df, args.output or FIGS / "train_size_curves.png", species_list=args.species)
         return
-    for group in (GROUPS if args.group == "all" else [args.group]):
-        plot_species_models_publication(df, FIGS / f"{group}.png", species_list=GROUPS[group])
+    for group in (groups if args.group == "all" else [args.group]):
+        plot_species_models_publication(df, FIGS / f"{group}.png", species_list=groups[group])
 
 
 if __name__ == "__main__":

@@ -6,10 +6,6 @@ from typing import List, Dict, Optional
 from src.paths import CLIPS_CSV, DATA, RESULTS, resolve
 from src.data_loader import Partition, make_partition
 
-DEFAULT_GROUPS = {
-    "anuran": ["pacific_chorus_frog", "woodhouses_toad", "yellow_legged_frog", "american_bullfrog"],
-    "nonbiotic": ["engine", "generator", "traffic", "device_static", "wind", "power_tools"],
-}
 
 
 @dataclass
@@ -24,9 +20,11 @@ class Config:
     split_seed: int = 1
     max_test_recording_clips: int = 25
     min_train_clips: int = 40
+    low_sample_test_fraction: float = 0.5
     donor_test_fraction: float = 0.2
-    multiclass_groups: Dict[str, List[str]] = field(default_factory=lambda: dict(DEFAULT_GROUPS))
-    multiclass_train_size: int = 80
+    class_types: Dict[str, List[str]] = field(default_factory=dict)
+    multiclass_groups: Dict[str, List[str]] = field(default_factory=dict)
+    multiclass_train_size: int = 40
     data_path: Path = DATA
     clips_csv: Path = CLIPS_CSV
     results_path: Path = RESULTS
@@ -56,9 +54,11 @@ def load_config(config_path: str = "config.yaml") -> Config:
         split_seed=exp.get("split_seed", exp.get("kfold_seed", 1)),
         max_test_recording_clips=exp.get("max_test_recording_clips", 25),
         min_train_clips=exp.get("min_train_clips", 40),
+        low_sample_test_fraction=exp.get("low_sample_test_fraction", 0.5),
         donor_test_fraction=exp.get("donor_test_fraction", 0.2),
-        multiclass_groups=exp.get("multiclass_groups", dict(DEFAULT_GROUPS)),
-        multiclass_train_size=exp.get("multiclass_train_size", 80),
+        class_types=exp.get("class_types", {}),
+        multiclass_groups=exp.get("multiclass_groups", {}),
+        multiclass_train_size=exp.get("multiclass_train_size", 40),
         data_path=data_path,
         clips_csv=resolve(exp.get("clips_csv", data_path / CLIPS_CSV.name)),
         results_path=results_path,
@@ -72,6 +72,8 @@ def load_config(config_path: str = "config.yaml") -> Config:
 def build_partition(manifest, cfg: Config) -> Partition:
     """The single test/train partition shared by every experiment (see make_partition)."""
     group_classes = {c for classes in cfg.multiclass_groups.values() for c in classes}
-    min_train = {c: cfg.multiclass_train_size if c in group_classes else cfg.min_train_clips for c in cfg.species}
+    min_train = {c: max(cfg.min_train_clips, cfg.multiclass_train_size if c in group_classes else 0)
+                 for c in cfg.species}
     return make_partition(manifest, cfg.species, cfg.test_size_per_class, cfg.split_seed,
-                          cfg.max_test_recording_clips, min_train, cfg.donor_test_fraction)
+                          cfg.max_test_recording_clips, min_train, cfg.donor_test_fraction,
+                          cfg.low_sample_test_fraction)

@@ -1,9 +1,10 @@
 experiments:
 - name: experiment
   description: >
-    Training-size experiment: frozen embeddings + MLP head, sizes 10-160 per class,
-    10 random training draws per size, test set of 50 clips per class held out by source
-    recording (shared with the multiclass experiment). Paths are relative to the repo root.
+    Artificial and abiotic noise: frozen embeddings + MLP head, training sizes 5-160 clips per
+    class, 10 random training draws per size. One test/train split by source recording, shared
+    with the multiclass experiment. Negatives come from every other class in data/metadata.csv
+    (including animal classes, used as negatives only). Paths are relative to the repo root.
   models:
   - birdnet
   - birdnet3
@@ -11,35 +12,42 @@ experiments:
   - perch2
   - cnn14
   - resnet
-  species:
+  species:                    # target classes (folder names in data/)
   - device_static
-  - pacific_chorus_frog
-  - woodhouses_toad
-  - field_cricket
-  - yellow_legged_frog
-  - american_bullfrog
-  - wind
-  - nutria
   - generator
   - traffic
   - engine
   - power_tools
   - human_vocal
-  - coyote
-  training_sizes: [10, 20, 40, 80, 160]
+  - metal_clanging
+  - airplane
+  - gun
+  - fireworks
+  - human_non_vocal
+  - wind
+  - thunder
+  - water
+  class_types:                # used to group the figures
+    artificial: [device_static, generator, traffic, engine, power_tools, human_vocal, metal_clanging,
+                 airplane, gun, fireworks, human_non_vocal]
+    abiotic: [wind, thunder, water]
+  training_sizes: [5, 10, 20, 40, 80, 160]
   n_epochs: 20
   batch_size: 32
   random_seeds: [1,2,3,4,5,6,7,8,9,10]   # 10 random training draws per size -> mean and 95% CI
-  # One train/test partition by source recording, shared by every experiment:
+  # One train/test split by source recording, shared by every experiment:
   split_seed: 1
   test_size_per_class: 50
   max_test_recording_clips: 25            # prefer small recordings for the test set
   min_train_clips: 40                     # a recording only goes to test if each class keeps >= this many training clips
-  donor_test_fraction: 0.2                # share of other (negative-only) classes held out for test negatives
-  multiclass_train_size: 80               # multiclass groups keep >= 80 training clips per class
+  # Classes with fewer than test_size_per_class + min_train_clips clips are "low sample": about half of their
+  # recordings go to test, the rest to training. They switch to the full design once metadata.csv has enough clips.
+  low_sample_test_fraction: 0.5
+  donor_test_fraction: 0.2                # share of negative-only classes (e.g. animals) held out for test negatives
+  multiclass_train_size: 40               # headline N; classes with fewer training clips wait for more data
   multiclass_groups:
-    anuran: [pacific_chorus_frog, woodhouses_toad, yellow_legged_frog, american_bullfrog]
-    nonbiotic: [engine, generator, traffic, device_static, wind, power_tools]
+    noise: [device_static, generator, traffic, engine, power_tools, human_vocal, metal_clanging,
+            airplane, gun, fireworks, human_non_vocal, wind, thunder, water]
   data_path: data
   results_path: results
   embeddings_path: results/embeddings

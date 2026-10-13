@@ -35,22 +35,24 @@ from src.results import (
 )
 
 
-def run_class(species, model_name, X, table, split, sizes, cfg, label_map):
+def run_class(species, model_name, X, table, split, sizes, cfg, label_map, low_sample=False):
     """All training sizes x seeds (+ zero-shot) for one class and model -> (run rows, prediction rows)."""
     test_files = split.test_pos + split.test_neg
     test_labels = [1] * len(split.test_pos) + [0] * len(split.test_neg)
     test_rows = table.rows(test_files)
     base = {"species": species, "model": model_name, "n_epochs": cfg.n_epochs, "batch_size": cfg.batch_size,
-            "test_size_per_class": len(split.test_pos)}
+            "test_size_per_class": len(split.test_pos), "low_sample": low_sample}
     rows, preds = [], []
 
     def record(size, seed, scores):
         preds.append({"training_size": size, "random_seed": seed, "scores": scores})
         return roc_auc_score(test_labels, scores)
 
+    skipped = [n for n in sizes if n > split.max_n]
+    if skipped:
+        print(f"  {species:20s} N={', '.join(map(str, skipped))}: skipped (training pool {split.max_n} clips per side)")
     for size in sizes:
         if size > split.max_n:
-            print(f"  {species} N={size}: skip (train pool {len(split.train_pos)} pos / {len(split.train_neg)} neg)")
             continue
         draws = [load_audio_files(size, split.train_pos, split.train_neg, seed) for seed in cfg.random_seeds]
         heads = train_heads(X, [table.rows(f) for f, _ in draws], [l for _, l in draws],
@@ -140,7 +142,8 @@ def main():
         X = torch.from_numpy(np.ascontiguousarray(table.emb)).to(device)
         print(f"[{model_name}] training heads on {device}")
         for sp in todo:
-            rows, pred_rows = run_class(sp, model_name, X, table, splits[sp], sizes[sp], cfg, label_map)
+            rows, pred_rows = run_class(sp, model_name, X, table, splits[sp], sizes[sp], cfg, label_map,
+                                        low_sample=sp in partition.low_sample)
             save_predictions(pred_rows, preds_dir, sp, model_name)
             save_runs(rows, runs_dir, sp, model_name)  # written last: marks the class x model as done
         del X

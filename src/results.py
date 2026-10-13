@@ -41,8 +41,10 @@ def save_results(results, output_path):
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     df = pd.DataFrame(results)
+    if "low_sample" not in df:
+        df["low_sample"] = False
     agg_results = (
-        df.groupby(["model", "species", "training_size", "n_epochs", "batch_size", "test_size_per_class"])
+        df.groupby(["model", "species", "training_size", "n_epochs", "batch_size", "test_size_per_class", "low_sample"])
         ["test_auc"].agg(["mean", "std", "count"]).round(4)
     )
     agg_results.columns = ["test_auc_mean", "test_auc_std", "test_auc_n"]
@@ -54,7 +56,7 @@ def save_results(results, output_path):
     ).round(4)
 
     column_order = [
-        "model", "species", "training_size", "n_epochs", "batch_size", "test_size_per_class",
+        "model", "species", "training_size", "n_epochs", "batch_size", "test_size_per_class", "low_sample",
         "test_auc_mean", "test_auc_std", "test_auc_ci_95", "test_auc_n",
     ]
     agg_results = agg_results[column_order]

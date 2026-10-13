@@ -93,19 +93,24 @@ class Partition:
     test_clips: dict[str, list[str]]   # per class: the fixed held-out clips (<= test_size for experiment classes)
     train_clips: dict[str, list[str]]  # per class: all clips from training recordings
     source: dict[str, str]             # filename -> source recording
+    low_sample: set                    # target classes too small for the full design (about half held out)
 
 
 def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int = 50, seed: int = 1,
                    max_test_recording_clips: int = 25, min_train: dict[str, int] | None = None,
-                   donor_test_fraction: float = 0.2) -> Partition:
+                   donor_test_fraction: float = 0.2, low_sample_test_fraction: float = 0.5) -> Partition:
     """Hold out whole recordings once, shared by the binary and multiclass experiments.
 
     Experiment classes (scarcest first) get recordings moved to the test set, in seeded random order,
     until they have `test_size` test clips: recordings with <= `max_test_recording_clips` clips first,
     larger ones only if still short. A recording is only moved if every experiment class it contains
-    keeps at least `min_train[cls]` training clips (recordings can hold several classes). Donor-only
-    classes with >= 2 recordings get ~`donor_test_fraction` of their clips held out, so test negatives
-    stay balanced across donors.
+    keeps at least `min_train[cls]` training clips (recordings can hold several classes).
+
+    Low-sample classes (fewer than `test_size + min_train[cls]` clips) use the same rule with a smaller
+    target: about `low_sample_test_fraction` of their clips go to test and the rest are kept for training.
+    Everything follows from the manifest, so a class moves to the full design once it has enough clips.
+    Donor-only classes with >= 2 recordings get ~`donor_test_fraction` of their clips held out, so test
+    negatives stay balanced across donors.
     """
     rng = random.Random(seed)
     min_train = min_train or {}
@@ -116,8 +121,17 @@ def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int = 
     n_train = dict(total)
     test = set()
 
+    target, floor = {}, {}
+    for c in classes:
+        if total[c] >= test_size + min_train.get(c, 0):
+            target[c], floor[c] = test_size, min_train.get(c, 0)
+        else:
+            target[c] = max(1, int(total[c] * low_sample_test_fraction))
+            floor[c] = total[c] - target[c]
+    low_sample = {c for c in classes if target[c] < test_size}
+
     def safe(rec):
-        return all(n_train[c] - k >= min(min_train.get(c, 0), n_train[c])
+        return all(n_train[c] - k >= min(floor[c], n_train[c])
                    for c, k in per_rec[rec].items() if c in classes)
 
     def hold_out(rec):
@@ -130,12 +144,12 @@ def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int = 
         recs = sorted(manifest[manifest.cls == c].source.unique())
         rng.shuffle(recs)
         for rec in recs:  # small recordings first
-            if n_test[c] >= test_size:
+            if n_test[c] >= target[c]:
                 break
             if rec not in test and size[rec] <= max_test_recording_clips and safe(rec):
                 hold_out(rec)
         for rec in sorted(recs, key=lambda r: (size[r], r)):  # larger ones only if still short
-            if n_test[c] >= test_size:
+            if n_test[c] >= target[c]:
                 break
             if rec not in test and safe(rec):
                 hold_out(rec)
@@ -157,7 +171,7 @@ def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int = 
         held = sorted(g.filename[in_test[g.index]])
         test_clips[c] = sorted(rng.sample(held, min(test_size, len(held)))) if c in classes else held
         train_clips[c] = sorted(g.filename[~in_test[g.index]])
-    return Partition(test, test_clips, train_clips, dict(zip(manifest.filename, manifest.source)))
+    return Partition(test, test_clips, train_clips, dict(zip(manifest.filename, manifest.source)), low_sample)
 
 
 @dataclass

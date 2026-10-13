@@ -1,388 +1,198 @@
 """
 figures.py
 
-Generates the three core figures from the binary-vs-multiclass experiment.
+Figures for the multiclass experiment (experiment/multiclass_fit.py), one set per multiclass group in
+src/config.yaml, with every model in its own panel:
 
-  Figure 1  binary_vs_multiclass_auc.{png,pdf}
-            Scatter: binary AUC (x) vs multiclass one-vs-rest AUC (y) at N=80.
-            Two subplots (anuran, nonbiotic). Axes auto-scaled per panel so the
-            anuran cluster (near 1.0) is not compressed. Leader-line labels.
+  Figure 1  binary_vs_multiclass_auc_{group}.{png,pdf}
+            Binary test AUC (training-size experiment at N = multiclass_train_size) vs multiclass
+            one-vs-rest AUC, same test clips. Colour = class; dashed line y = x.
+  Figure 2  confusion_matrices_{group}.{png,pdf}
+            Row-normalised recall, counts summed over seeds. Each row is labelled with its test clips;
+            a class with no test clips gets a hatched row reading "no test clips".
+  Figure 3  tsne_embeddings_{group}.{png,pdf}
+            t-SNE of the test-clip embeddings. Stars = class centroids.
 
-  Figure 2  confusion_matrices.{png,pdf}
-            2×2 grid (group × model), counts summed over seeds, shared colourbar
-            per row so axis labels don't collide.
-
-  Figure 3  tsne_embeddings.{png,pdf}
-            2×2 grid (group × model), t-SNE of test-set embeddings for both
-            BirdNET and Perch. Stars = class centroids.
-
-Prerequisites:
-    python experiment/multiclass_fit.py      # Figures 1 & 2
-    python experiment/extract_embeddings.py  # Figure 3
+Prerequisites: main.py (binary results) and experiment/multiclass_fit.py.
 
 Usage:
-    python experiment/figures.py [--fig 1] [--fig 2] [--fig 3]
-    python experiment/figures.py                                # all three
+    pixi run python experiment/figures.py              # all figures
+    pixi run python experiment/figures.py --fig 2      # one figure
 """
 
-import argparse, json, sys
+import argparse
+import json
+import math
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.cm as mplcm
-import seaborn as sns
+from matplotlib.patches import Rectangle
 from sklearn.manifold import TSNE
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.paths import FIGS, ROOT  # noqa: E402
+from src.config import load_config  # noqa: E402
+from src.plot_style import CLASS_COLORS, MODELS, class_name, model_name  # noqa: E402
 
-ROOT      = Path(__file__).resolve().parent.parent
-EXP_PATH  = ROOT / "results" / "experiment"
-FIGS_PATH = ROOT / "figs"
-BIN_PATH  = ROOT / "results"
-
-ANURAN    = ["pacific_chorus_frog", "woodhouses_toad", "yellow_legged_frog", "american_bullfrog"]
-NONBIOTIC = ["engine", "generator", "traffic", "device_static", "wind", "power_tools"]
-GROUPS    = {"anuran": ANURAN, "nonbiotic": NONBIOTIC}
-GROUP_TITLES = {"anuran": "Anuran group", "nonbiotic": "Non-biotic group"}
-
-MODEL_COLOR  = {"birdnet": "#2E86AB", "perch": "#F18F01"}
-MODEL_MARKER = {"birdnet": "o",       "perch": "s"}
-MODEL_LABEL  = {"birdnet": "BirdNET", "perch": "Perch"}
-
-DISPLAY = {
-    "pacific_chorus_frog": "PCF",
-    "woodhouses_toad":     "Woodhouse's toad",
-    "yellow_legged_frog":  "Yellow-legged frog",
-    "american_bullfrog":   "Bullfrog",
-    "engine":              "Engine",
-    "generator":           "Generator",
-    "traffic":             "Traffic",
-    "device_static":       "Device static",
-    "wind":                "Wind",
-    "power_tools":         "Power tools",
-}
-
-# tab10 gives 10 perceptually distinct colours (works for up to 6 classes)
-CLASS_COLORS = [mplcm.tab10(i) for i in range(10)]
-
-STYLE = {
-    "font.family": "sans-serif",
-    "font.size": 9,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-}
+STYLE = {"font.family": "sans-serif", "font.size": 9, "axes.spines.top": False, "axes.spines.right": False}
 
 
-# ── Data loading ──────────────────────────────────────────────────────────────
-
-def load_binary_auc() -> pd.DataFrame:
-    rows = []
-    for sp in ANURAN + NONBIOTIC:
-        path = BIN_PATH / f"results_{sp}.csv"
-        if not path.exists():
-            print(f"  [warn] missing binary results: {path.name}")
-            continue
-        df = pd.read_csv(path)
-        for _, row in df[df.training_size == 80][["model", "test_auc_mean"]].iterrows():
-            rows.append({"species": sp, "model": row["model"], "binary_auc": row["test_auc_mean"]})
-    return pd.DataFrame(rows)
+def grid(n_panels: int, panel_w: float, panel_h: float):
+    n_cols = min(3, n_panels)
+    n_rows = math.ceil(n_panels / n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(panel_w * n_cols, panel_h * n_rows), squeeze=False,
+                             constrained_layout=True)
+    axes = axes.flatten()
+    for ax in axes[n_panels:]:
+        ax.set_visible(False)
+    return fig, axes
 
 
-def load_multiclass_auc() -> pd.DataFrame:
-    csvs = list(EXP_PATH.glob("run_multiclass_*.csv"))
-    if not csvs:
-        raise FileNotFoundError(
-            f"No multiclass run files in {EXP_PATH}. Run experiment/multiclass_fit.py first."
-        )
-    df = pd.concat(pd.read_csv(p) for p in csvs)
-    return (
-        df.groupby(["group", "model", "class_name"])["ovr_auc"]
-        .agg(mean="mean", std="std")
-        .reset_index()
-        .rename(columns={"mean": "multi_auc_mean", "std": "multi_auc_std"})
-    )
+def save(fig, name: str):
+    FIGS.mkdir(parents=True, exist_ok=True)
+    for ext in ("png", "pdf"):
+        fig.savefig(FIGS / f"{name}.{ext}", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {FIGS / name}.{{png,pdf}}")
 
 
-def load_confusion_matrices(group: str, model: str) -> tuple[np.ndarray, list[str]]:
-    label_file = EXP_PATH / f"labels_{group}.json"
-    if not label_file.exists():
-        raise FileNotFoundError(f"Labels file not found: {label_file}")
-    labels = json.loads(label_file.read_text())
-    cms = [
-        np.load(EXP_PATH / f"cm_multiclass_{group}_{model}_seed{s}.npy")
-        for s in range(1, 11)
-        if (EXP_PATH / f"cm_multiclass_{group}_{model}_seed{s}.npy").exists()
-    ]
-    if not cms:
-        raise FileNotFoundError(f"No confusion matrices for {group}/{model}")
-    return np.stack(cms).sum(axis=0), labels
-
-
-# ── Figure 1 helpers ──────────────────────────────────────────────────────────
-
-# Fixed, comparable axes for both panels
-SCATTER_XLIM = (0.80, 1.003)
-SCATTER_YLIM = (0.70, 1.003)
-
-# ── Label positions — edit (text_x, text_y) in data coordinates to taste ──────
-# x range: 0.80 – 1.00  |  y range: 0.70 – 1.00
-LABEL_POS = {
-    "anuran": {
-        "pacific_chorus_frog": {"birdnet": (0.97, 0.92), "perch": (0.98, 0.97)},
-        "woodhouses_toad":     {"birdnet": (0.99, 0.90), "perch": (0.95, 1.00)},
-        "yellow_legged_frog":  {"birdnet": (0.94, 0.96), "perch": (0.93, 0.98)},
-        "american_bullfrog":   {"birdnet": (0.97, 0.94), "perch": (0.98, 1.01)},
-    },
-    "nonbiotic": {
-        "engine":              {"birdnet": (0.92, 0.75), "perch": (0.91, 0.96)},
-        "generator":           {"birdnet": (0.96, 0.85), "perch": (1.00, 0.94)},
-        "traffic":             {"birdnet": (0.92, 0.72), "perch": (0.88, 0.95)},
-        "device_static":       {"birdnet": (0.90, 0.80), "perch": (0.93, 0.99)},
-        "wind":                {"birdnet": (0.99, 0.90), "perch": (1.00, 0.97)},
-        "power_tools":         {"birdnet": (0.98, 0.80), "perch": (0.97, 1.01)},
-    },
-}
+def available_models(exp: Path, group: str, prefix: str, suffix: str) -> list[str]:
+    return [m for m in MODELS if (exp / f"{prefix}_{group}_{m}.{suffix}").exists()]
 
 
 # ── Figure 1 ──────────────────────────────────────────────────────────────────
 
-def fig_scatter_auc():
-    binary_df = load_binary_auc()
-    multi_df  = load_multiclass_auc()
-    models    = ["birdnet", "perch"]
+def fig_binary_vs_multiclass(cfg, exp: Path, group: str, classes: list[str]):
+    n = cfg.multiclass_train_size
+    binary = []
+    for c in classes:
+        path = cfg.results_path / f"results_{c}.csv"
+        if path.exists():
+            df = pd.read_csv(path)
+            binary.append(df[df.training_size == n][["species", "model", "test_auc_mean"]])
+    if not binary:
+        print("  Figure 1: no binary results (run main.py first)")
+        return
+    binary = pd.concat(binary).rename(columns={"species": "class_name", "test_auc_mean": "binary_auc"})
+    multi = pd.read_csv(exp / "multiclass_results.csv")
+    multi = multi[multi.group == group][["model", "class_name", "ovr_auc_mean"]]
+    both = binary.merge(multi, on=["model", "class_name"])
+    models = [m for m in MODELS if m in set(both.model)]
+    lo = math.floor(min(both.binary_auc.min(), both.ovr_auc_mean.min()) * 20) / 20
 
     with plt.rc_context(STYLE):
-        fig, axes = plt.subplots(1, 2, figsize=(11, 4.8))
-        fig.subplots_adjust(wspace=0.38)
-
-        for ax, (group, classes) in zip(axes, GROUPS.items()):
-            ax.set_title(GROUP_TITLES[group], fontsize=10, fontweight="bold", pad=8)
-            ax.set_xlabel("Binary AUC (N=80)", fontsize=9)
-            ax.set_ylabel("Multiclass one-vs-rest AUC (N=80)", fontsize=9)
-
-            # Fixed comparable axes
-            xlim, ylim = SCATTER_XLIM, SCATTER_YLIM
-            ax.set_xlim(xlim); ax.set_ylim(ylim)
-            ax.xaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.2f}"))
-            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.2f}"))
-
-            # Diagonal with label
-            d_lo = max(xlim[0], ylim[0])
-            d_hi = min(xlim[1], ylim[1])
-            ax.plot([d_lo, d_hi], [d_lo, d_hi], "--", color="#bbbbbb", lw=0.9, zorder=0)
-            mid = (d_lo + d_hi) / 2
-            ax.text(mid, mid, "  y = x", fontsize=6.5, color="#999999",
-                    rotation=45, rotation_mode="anchor", ha="left", va="bottom", zorder=1)
-
-            # Scatter and label each dot
-            any_data = False
-            for model in models:
-                for cls in classes:
-                    br = binary_df[(binary_df.species == cls) & (binary_df.model == model)]
-                    mr = multi_df[(multi_df.class_name == cls) & (multi_df.model == model)]
-                    if br.empty or mr.empty:
-                        continue
-                    any_data = True
-                    x = float(br.binary_auc.iloc[0])
-                    y = float(mr.multi_auc_mean.iloc[0])
-
-                    ax.scatter(x, y, color=MODEL_COLOR[model], marker=MODEL_MARKER[model],
-                               s=55, zorder=4, linewidths=0.6, edgecolors="white")
-
-                    tx, ty = LABEL_POS.get(group, {}).get(cls, {}).get(model, (x, y - 0.02))
-                    ax.annotate(
-                        DISPLAY.get(cls, cls), xy=(x, y), xytext=(tx, ty),
-                        xycoords="data", textcoords="data",
-                        fontsize=7, ha="center", va="center", color="#222222",
-                        arrowprops=dict(arrowstyle="-", color="#bbbbbb", lw=0.5,
-                                        shrinkA=0, shrinkB=3),
-                        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.88),
-                        zorder=6,
-                    )
-
-            if not any_data:
-                ax.text(0.5, 0.5, "No data — run multiclass_fit.py first",
-                        transform=ax.transAxes, ha="center", va="center",
-                        fontsize=8, color="gray")
-
-            # Legend — boxed
-            handles = [
-                plt.Line2D([0], [0], marker=MODEL_MARKER[m], color=MODEL_COLOR[m],
-                           linestyle="", markersize=6, label=MODEL_LABEL[m])
-                for m in models
-            ]
-            ax.legend(handles=handles, fontsize=8, frameon=True,
-                      edgecolor="#cccccc", facecolor="white", framealpha=0.9)
-
-        FIGS_PATH.mkdir(parents=True, exist_ok=True)
-        out = FIGS_PATH / "binary_vs_multiclass_auc"
-        fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
-        fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved Figure 1 → {out}.{{png,pdf}}")
+        fig, axes = grid(len(models), 3.4, 3.4)
+        for ax, model in zip(axes, models):
+            d = both[both.model == model]
+            ax.plot([lo, 1], [lo, 1], "--", color="#bbbbbb", lw=0.9, zorder=0)
+            for i, c in enumerate(classes):
+                r = d[d.class_name == c]
+                if len(r):
+                    ax.scatter(r.binary_auc, r.ovr_auc_mean, color=CLASS_COLORS[i], s=40, zorder=3,
+                               edgecolors="white", linewidths=0.5, label=class_name(c))
+            ax.set_xlim(lo, 1.005); ax.set_ylim(lo, 1.005); ax.set_aspect("equal")
+            ax.set_title(model_name(model), fontweight="bold")
+            ax.set_xlabel(f"Binary AUC (N={n})"); ax.set_ylabel("Multiclass one-vs-rest AUC")
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="outside lower center", ncol=min(len(labels), 4), frameon=False)
+        save(fig, f"binary_vs_multiclass_auc_{group}")
 
 
 # ── Figure 2 ──────────────────────────────────────────────────────────────────
 
-def _draw_cm(ax, cm: np.ndarray, label_names: list[str], title: str,
-             show_cbar: bool = True) -> None:
-    row_sums = cm.sum(axis=1, keepdims=True).clip(min=1)
-    cm_pct   = cm / row_sums * 100
-    display  = [DISPLAY.get(n, n.replace("_", " ").capitalize()) for n in label_names]
-
-    annot = np.empty(cm.shape, dtype=object)
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            annot[i, j] = f"{cm_pct[i,j]:.0f}%\n({cm[i,j]})"
-
-    sns.heatmap(
-        cm_pct, annot=annot, fmt="", cmap="Blues", vmin=0, vmax=100,
-        xticklabels=display, yticklabels=display,
-        linewidths=0.4, linecolor="#e0e0e0",
-        cbar=show_cbar,
-        cbar_kws={"label": "Recall (%)", "shrink": 0.75, "pad": 0.02} if show_cbar else {},
-        ax=ax, annot_kws={"size": 7, "linespacing": 1.2},
-    )
-    ax.set_title(title, fontsize=9, fontweight="bold", pad=6)
-    ax.set_xlabel("Predicted", fontsize=8, labelpad=6)
-    # Only draw y-label on left column (caller passes show_ylabel)
-    ax.tick_params(axis="both", labelsize=7.5, length=0)
-    plt.setp(ax.get_xticklabels(), rotation=40, ha="right", rotation_mode="anchor")
-    plt.setp(ax.get_yticklabels(), rotation=0)
-    if show_cbar:
-        ax.collections[0].colorbar.ax.tick_params(labelsize=7)
+def _draw_cm(ax, cm: np.ndarray, classes: list[str], test_n: list[int], title: str, show_ylabels: bool):
+    n = len(classes)
+    rows = cm.sum(axis=1, keepdims=True)
+    pct = np.divide(cm, rows, out=np.full(cm.shape, np.nan), where=rows > 0) * 100
+    im = ax.imshow(pct, cmap="Blues", vmin=0, vmax=100)
+    for i in range(n):
+        if rows[i, 0] == 0:  # no test clips: hatched row instead of a misleading row of zeros
+            ax.add_patch(Rectangle((-0.5, i - 0.5), n, 1, facecolor="#eeeeee", edgecolor="#999999",
+                                   hatch="///", lw=0))
+            ax.text((n - 1) / 2, i, "no test clips", ha="center", va="center", fontsize=7, color="#555555")
+            continue
+        for j in range(n):
+            ax.text(j, i, f"{pct[i, j]:.0f}", ha="center", va="center", fontsize=6.5,
+                    color="white" if pct[i, j] > 60 else "#222222")
+    names = [class_name(c) for c in classes]
+    ax.set_xticks(range(n), names, rotation=45, ha="right", fontsize=7)
+    ax.set_yticks(range(n), [f"{nm} (n={k})" for nm, k in zip(names, test_n)] if show_ylabels else [""] * n,
+                  fontsize=7)
+    ax.set_xlabel("Predicted", fontsize=8)
+    if show_ylabels:
+        ax.set_ylabel("True (test clips per class)", fontsize=8)
+    ax.set_title(title, fontweight="bold")
+    ax.tick_params(length=0)
+    return im
 
 
-def fig_confusion_matrices():
-    models = ["birdnet", "perch"]
-    groups = list(GROUPS)
-
+def fig_confusion_matrices(cfg, exp: Path, group: str, classes: list[str], test_n: list[int]):
+    models = available_models(exp, group, "cm", "npy")
     with plt.rc_context(STYLE):
-        fig, axes = plt.subplots(
-            len(groups), len(models),
-            figsize=(5.0 * len(models), 4.5 * len(groups)),
-            constrained_layout=True,
-        )
-
-        for r, group in enumerate(groups):
-            for c, model in enumerate(models):
-                ax = axes[r][c]
-                show_cbar = (c == len(models) - 1)   # colorbar only on right column
-                try:
-                    cm, labels = load_confusion_matrices(group, model)
-                    _draw_cm(ax, cm, labels,
-                             f"{GROUP_TITLES[group]} — {MODEL_LABEL[model]}",
-                             show_cbar=show_cbar)
-                    if c == 0:
-                        ax.set_ylabel("True", fontsize=8, labelpad=8)
-                    else:
-                        ax.set_ylabel("")
-                        ax.set_yticklabels([])
-                except FileNotFoundError as e:
-                    ax.text(0.5, 0.5, str(e), transform=ax.transAxes,
-                            ha="center", va="center", fontsize=7, color="red")
-                    ax.set_title(f"{GROUP_TITLES[group]} — {MODEL_LABEL[model]}", fontsize=9)
-
-        FIGS_PATH.mkdir(parents=True, exist_ok=True)
-        out = FIGS_PATH / "confusion_matrices"
-        fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
-        fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved Figure 2 → {out}.{{png,pdf}}")
+        fig, axes = grid(len(models), 3.6, 3.6)
+        for k, (ax, model) in enumerate(zip(axes, models)):
+            cm = np.load(exp / f"cm_{group}_{model}.npy").sum(axis=0)
+            im = _draw_cm(ax, cm, classes, test_n, model_name(model), show_ylabels=k % 3 == 0)
+        fig.colorbar(im, ax=axes[:len(models)].tolist(), shrink=0.6, label="Recall (%), summed over seeds")
+        save(fig, f"confusion_matrices_{group}")
 
 
 # ── Figure 3 ──────────────────────────────────────────────────────────────────
 
-def _tsne_panel(ax, group: str, classes: list[str], model_name: str,
-                perplexity: int, seed: int) -> None:
-    npz_path = EXP_PATH / f"embeddings_{group}_{model_name}.npz"
-    if not npz_path.exists():
-        ax.text(0.5, 0.5,
-                f"Missing:\n{npz_path.name}\nRun extract_embeddings.py",
-                transform=ax.transAxes, ha="center", va="center",
-                fontsize=8, color="red")
-        ax.set_title(f"{GROUP_TITLES[group]}\n{MODEL_LABEL[model_name]}")
-        return
-
-    data  = np.load(npz_path, allow_pickle=True)
-    embs  = data["embeddings"]
-    lbls  = data["labels"]
-    names = list(data["class_names"])
-
-    print(f"  t-SNE  {group}/{model_name}  {embs.shape} ...")
-    coords = TSNE(
-        n_components=2, perplexity=perplexity,
-        random_state=seed, max_iter=1000,
-    ).fit_transform(embs)
-
-    for i, cls in enumerate(names):
-        mask = lbls == i
-        ax.scatter(coords[mask, 0], coords[mask, 1],
-                   color=CLASS_COLORS[i], label=DISPLAY.get(cls, cls),
-                   s=18, alpha=0.72, linewidths=0)
-
-    for i in range(len(names)):
-        c = coords[lbls == i].mean(axis=0)
-        ax.scatter(*c, color=CLASS_COLORS[i],
-                   marker="*", s=160, edgecolors="white", linewidths=0.8, zorder=5)
-
-    ax.set_title(f"{GROUP_TITLES[group]}\n{MODEL_LABEL[model_name]}",
-                 fontsize=9, fontweight="bold")
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.legend(fontsize=7.5, frameon=False, loc="best", markerscale=1.3,
-              handletextpad=0.4, borderpad=0)
-
-    # Centroid caption
-    ax.text(0.98, 0.02, "★ = class centroid",
-            transform=ax.transAxes, fontsize=6.5, color="#555555",
-            ha="right", va="bottom")
-
-
-def fig_tsne(perplexity: int = 30, seed: int = 0):
-    models = ["birdnet", "perch"]
-    groups = list(GROUPS)
-
+def fig_tsne(cfg, exp: Path, group: str, classes: list[str], perplexity: int = 30, seed: int = 0):
+    models = available_models(exp, group, "test_embeddings", "npz")
     with plt.rc_context(STYLE):
-        fig, axes = plt.subplots(
-            len(groups), len(models),
-            figsize=(5.5 * len(models), 5.0 * len(groups)),
-            constrained_layout=True,
-        )
+        fig, axes = grid(len(models), 3.4, 3.4)
+        for ax, model in zip(axes, models):
+            data = np.load(exp / f"test_embeddings_{group}_{model}.npz")
+            embs, labels = data["embeddings"], data["labels"]
+            print(f"  t-SNE {group}/{model} {embs.shape}")
+            xy = TSNE(n_components=2, perplexity=min(perplexity, len(embs) - 1), random_state=seed,
+                      max_iter=1000).fit_transform(embs)
+            for i, c in enumerate(classes):
+                pts = xy[labels == i]
+                if len(pts):
+                    ax.scatter(pts[:, 0], pts[:, 1], color=CLASS_COLORS[i], s=10, alpha=0.7, linewidths=0,
+                               label=class_name(c))
+                    ax.scatter(*pts.mean(axis=0), color=CLASS_COLORS[i], marker="*", s=140,
+                               edgecolors="white", linewidths=0.8, zorder=5)
+            ax.set_title(model_name(model), fontweight="bold")
+            ax.set_xticks([]); ax.set_yticks([])
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="outside lower center", ncol=min(len(labels), 4), frameon=False,
+                   markerscale=2, title="★ = class centroid")
+        save(fig, f"tsne_embeddings_{group}")
 
-        for r, (group, classes) in enumerate(GROUPS.items()):
-            for c, model_name in enumerate(models):
-                _tsne_panel(axes[r][c], group, classes, model_name, perplexity, seed)
-
-        FIGS_PATH.mkdir(parents=True, exist_ok=True)
-        out = FIGS_PATH / "tsne_embeddings"
-        fig.savefig(out.with_suffix(".png"), dpi=300, bbox_inches="tight")
-        fig.savefig(out.with_suffix(".pdf"), bbox_inches="tight")
-        plt.close(fig)
-        print(f"Saved Figure 3 → {out}.{{png,pdf}}")
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fig", type=int, action="append", dest="figs",
-                        choices=[1, 2, 3], metavar="N",
+    parser.add_argument("--config", default=str(ROOT / "src" / "config.yaml"))
+    parser.add_argument("--fig", type=int, action="append", dest="figs", choices=[1, 2, 3],
                         help="Figure number(s) to generate (default: all)")
     args = parser.parse_args()
     figs = set(args.figs) if args.figs else {1, 2, 3}
+    cfg = load_config(args.config)
+    exp = cfg.results_path / "experiment"
 
-    if 1 in figs:
-        print("\n── Figure 1: binary vs multiclass AUC scatter ──")
-        fig_scatter_auc()
-    if 2 in figs:
-        print("\n── Figure 2: confusion matrices ──")
-        fig_confusion_matrices()
-    if 3 in figs:
-        print("\n── Figure 3: t-SNE (BirdNET + Perch) ──")
-        fig_tsne()
-
-    print("\nAll done.")
+    for group in cfg.multiclass_groups:
+        labels_file = exp / f"labels_{group}.json"
+        if not labels_file.exists():
+            print(f"{group}: no multiclass results (run experiment/multiclass_fit.py first)")
+            continue
+        info = json.loads(labels_file.read_text())
+        classes, test_n = info["classes"], info["test_n"]
+        print(f"\n{group}: {len(classes)} classes")
+        if 1 in figs:
+            fig_binary_vs_multiclass(cfg, exp, group, classes)
+        if 2 in figs:
+            fig_confusion_matrices(cfg, exp, group, classes, test_n)
+        if 3 in figs:
+            fig_tsne(cfg, exp, group, classes)
 
 
 if __name__ == "__main__":
