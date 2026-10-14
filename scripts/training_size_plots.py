@@ -2,8 +2,8 @@
 training_size_plots.py
 
 Saturation figures (test ROC-AUC vs training size, mean ± 95% CI over 10 random training draws):
-  figs/saturation_main.png        well-sampled classes (full design: 50 test clips, N up to 40-160)
-  figs/saturation_low_sample.png  low-sample classes (provisional: small test sets)
+  figs/saturation_main.png/.pdf    well-sampled classes (full design: 50 test clips, N up to 40-160)
+  figs/saturation_low_sample.png/.pdf  low-sample classes (provisional: small test sets)
 Zero-shot results (the model's own built-in label, no training) are open markers at N = 0; each panel
 lists which models have a built-in label for the class ("known") - for the others the class is new.
 
@@ -158,9 +158,11 @@ def plot_species_models_publication(df, output_path, species_list=None, suptitle
     if suptitle:
         fig.suptitle(suptitle, fontweight="semibold", fontsize=13, y=0.95)
     plt.subplots_adjust(hspace=0.45, wspace=0.1, bottom=0.08 if n_rows > 1 else 0.14)
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, dpi=300, bbox_inches='tight', pad_inches=0.3, facecolor='white')
-    print(f"Plot saved to {output_path}")
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    for ext in (".png", ".pdf"):
+        plt.savefig(output_path.with_suffix(ext), dpi=300, bbox_inches='tight', pad_inches=0.3, facecolor='white')
+    print(f"Plot saved to {output_path.with_suffix('')}.{{png,pdf}}")
     plt.close()
 
 

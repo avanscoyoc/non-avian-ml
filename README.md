@@ -41,6 +41,16 @@ exactly the same 40 clips per class as the binary N = 40 draws (10 random draws)
 Currently 7 classes qualify (device static, generator, traffic, engine, power tools, human vocal, wind); classes
 with fewer than 40 training clips join automatically once more data is added.
 
+**Cross-detection** (`experiment/cross_detection.py`). Each class's binary detector is run on the test clips of
+every class (detected = p ≥ 0.5): the diagonal is recall, the other cells are false alarms. Two versions: N = 40
+(the same training clips as the multiclass head, so binary false alarms and multiclass confusions compare
+like-for-like) and all training clips (`--all-data`, the deployment view; the test recordings stay held out).
+As a check, each detector also gets a cutoff tuned on its own training data (out-of-fold F1, folds split by
+recording). In both versions this raised recall and false alarms together without consistently improving their
+balance, and made low-sample detectors worse, so the figures use 0.5; both are in the CSV. Training on all clips
+mainly lowers false alarms (mean over well-sampled detectors 0.14–0.23 → 0.11–0.17); recall rises for device static
+and traffic but not for power tools or human vocal, whose many clips come from only 2 recordings each.
+
 ## Classes
 
 The 14 target classes are listed in `src/config.yaml` (`species`, grouped by `class_types`):
@@ -188,6 +198,8 @@ After `main.py` (the figures compare against its binary results at N = 40):
 ```bash
 pixi run python experiment/multiclass_fit.py          # -> results/experiment/
 pixi run python experiment/figures.py                 # -> figs/*_noise.{png,pdf}
+pixi run python experiment/cross_detection.py             # binary cross-detection, N = 40 -> figs/cross_detection.png
+pixi run python experiment/cross_detection.py --all-data  # all training clips -> figs/cross_detection_all_data.png
 ```
 
 Outputs: `multiclass_noise_{model}.csv` (per random draw and class: test n, one-vs-rest AUC, precision, recall,
@@ -197,8 +209,15 @@ and test-clip embeddings for the t-SNE figure. A class without test clips gets N
 
 ![Multiclass confusion matrices](figs/confusion_matrices_noise.png)
 
-Also: `figs/binary_vs_multiclass_auc_noise.png` (binary vs one-vs-rest AUC, same test clips) and
+Also: `figs/binary_vs_multiclass_auc_noise.png` (binary vs one-vs-rest AUC, same positive test clips) and
 `figs/tsne_embeddings_noise.png` (t-SNE of the test-clip embeddings).
+
+Cross-detection outputs: `results/experiment/cross_detection[_all_data].csv` (per model × detector × test class:
+detection rate at 0.5, detection rate at the tuned cutoff, mean tuned cutoff; means over 10 draws).
+
+![Binary cross-detection, N = 40](figs/cross_detection.png)
+
+The all-training-data version is `figs/cross_detection_all_data.png`.
 
 ## Running the robustness check and the window experiment
 

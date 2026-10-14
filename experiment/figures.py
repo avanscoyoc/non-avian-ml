@@ -8,8 +8,10 @@ src/config.yaml, with every model in its own panel:
             Binary test AUC (training-size experiment at N = multiclass_train_size) vs multiclass
             one-vs-rest AUC, same test clips. Colour = class; dashed line y = x.
   Figure 2  confusion_matrices_{group}.{png,pdf}
-            Row-normalised recall, counts summed over seeds. Each row is labelled with its test clips;
-            a class with no test clips gets a hatched row reading "no test clips".
+            Rows = true class, columns = predicted class; each cell is the proportion of that class's test
+            clips (counts pooled over the 10 draws), so rows sum to 1 and the outlined diagonal is recall.
+            Same look as the binary cross-detection matrix (viridis, ".92" proportions). A class with no
+            test clips gets a hatched row reading "no test clips".
   Figure 3  tsne_embeddings_{group}.{png,pdf}
             t-SNE of the test-clip embeddings. Stars = class centroids.
 
@@ -105,29 +107,41 @@ def fig_binary_vs_multiclass(cfg, exp: Path, group: str, classes: list[str]):
 
 # ── Figure 2 ──────────────────────────────────────────────────────────────────
 
+DIAGONAL_EDGE = "#e0475b"  # outline for correct predictions (recall)
+NO_DATA = "#eceff3"       # hatched cells without test clips
+
+
+def _fraction(v: float) -> str:
+    """0.92 -> '.92', 1.0 -> '1.00' (proportion, two decimals, no leading zero)."""
+    return f"{v:.2f}".replace("0.", ".", 1) if v < 1 else f"{v:.2f}"
+
+
 def _draw_cm(ax, cm: np.ndarray, classes: list[str], test_n: list[int], title: str, show_ylabels: bool):
     n = len(classes)
     rows = cm.sum(axis=1, keepdims=True)
-    pct = np.divide(cm, rows, out=np.full(cm.shape, np.nan), where=rows > 0) * 100
-    im = ax.imshow(pct, cmap="Blues", vmin=0, vmax=100)
+    frac = np.divide(cm, rows, out=np.full(cm.shape, np.nan), where=rows > 0)
+    im = ax.imshow(frac, cmap="viridis", vmin=0, vmax=1)
     for i in range(n):
         if rows[i, 0] == 0:  # no test clips: hatched row instead of a misleading row of zeros
-            ax.add_patch(Rectangle((-0.5, i - 0.5), n, 1, facecolor="#eeeeee", edgecolor="#999999",
-                                   hatch="///", lw=0))
+            ax.add_patch(Rectangle((-0.5, i - 0.5), n, 1, facecolor=NO_DATA, edgecolor="#b8bec8", hatch="///", lw=0))
             ax.text((n - 1) / 2, i, "no test clips", ha="center", va="center", fontsize=7, color="#555555")
             continue
         for j in range(n):
-            ax.text(j, i, f"{pct[i, j]:.0f}", ha="center", va="center", fontsize=6.5,
-                    color="white" if pct[i, j] > 60 else "#222222")
-    names = [class_name(c) for c in classes]
-    ax.set_xticks(range(n), names, rotation=45, ha="right", fontsize=7)
+            ax.text(j, i, _fraction(frac[i, j]), ha="center", va="center", fontsize=6.5,
+                    color="#111111" if frac[i, j] > 0.55 else "white")
+        ax.add_patch(Rectangle((i - 0.5, i - 0.5), 1, 1, fill=False, edgecolor=DIAGONAL_EDGE, lw=1.8))
+    names = [c.replace("_", " ") for c in classes]
+    ax.set_xticks(range(n), names, rotation=90, fontsize=7)
     ax.set_yticks(range(n), [f"{nm} (n={k})" for nm, k in zip(names, test_n)] if show_ylabels else [""] * n,
                   fontsize=7)
-    ax.set_xlabel("Predicted", fontsize=8)
+    ax.set_xlabel("Predicted class", fontsize=8)
     if show_ylabels:
-        ax.set_ylabel("True (test clips per class)", fontsize=8)
-    ax.set_title(title, fontweight="bold")
+        ax.set_ylabel("True class (test clips)", fontsize=8)
+    ax.set_title(title, fontsize=9)
     ax.tick_params(length=0)
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_color("#333333")
     return im
 
 
@@ -138,7 +152,8 @@ def fig_confusion_matrices(cfg, exp: Path, group: str, classes: list[str], test_
         for k, (ax, model) in enumerate(zip(axes, models)):
             cm = np.load(exp / f"cm_{group}_{model}.npy").sum(axis=0)
             im = _draw_cm(ax, cm, classes, test_n, model_name(model), show_ylabels=k % 3 == 0)
-        fig.colorbar(im, ax=axes[:len(models)].tolist(), shrink=0.6, label="Recall (%), summed over seeds")
+        fig.colorbar(im, ax=axes[:len(models)].tolist(), shrink=0.6,
+                     label="Proportion of a class's test clips (diagonal = recall), 10 draws pooled")
         save(fig, f"confusion_matrices_{group}")
 
 
