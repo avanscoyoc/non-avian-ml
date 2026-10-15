@@ -28,14 +28,19 @@ nodejs = ">=20"
 download-models = "python -m scripts.download_models"
 check-data = "python -m scripts.check_data"
 zero-shot-labels = "python -m scripts.zero_shot_label_check"
-# Experiments (docs/brief.md). Each skips work whose results are already saved, then draws its figures.
-saturation = "python -m experiments.saturation"
-linear-probe = "python -m experiments.linear_probe"
-cross-detection = "python -m experiments.cross_detection"
-multiclass = "python -m experiments.multiclass"
-window-length = "python -m experiments.window_length"
-experiments = """python -m experiments.saturation && python -m experiments.linear_probe \
-  && python -m experiments.cross_detection && python -m experiments.multiclass && python -m experiments.window_length"""
+# Exact train/test clips of every experiment (data/splits/): write them, or check they match what the code uses
+splits = "python -m scripts.export_splits"
+check-splits = "python -m scripts.export_splits --check"
+# Experiments (docs/brief.md). Each checks data/splits/ first, skips work whose results are already saved, then
+# draws its figures.
+saturation = { cmd = "python -m experiments.saturation", depends-on = ["check-splits"] }
+linear-probe = { cmd = "python -m experiments.linear_probe", depends-on = ["check-splits"] }
+cross-detection = { cmd = "python -m experiments.cross_detection", depends-on = ["check-splits"] }
+multiclass = { cmd = "python -m experiments.multiclass", depends-on = ["check-splits"] }
+window-length = { cmd = "python -m experiments.window_length", depends-on = ["check-splits"] }
+experiments = { cmd = """python -m experiments.saturation && python -m experiments.linear_probe \
+  && python -m experiments.cross_detection && python -m experiments.multiclass \
+  && python -m experiments.window_length""", depends-on = ["check-splits"] }
 # Redraw every figure in figs/ from the saved results
 figures = """python -m experiments.saturation --plot && python -m experiments.linear_probe --plot \
   && python -m experiments.cross_detection --plot && python -m experiments.multiclass --plot \

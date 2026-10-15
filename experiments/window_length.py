@@ -45,10 +45,15 @@ SIZES = [5, 10, 20]
 TEST_SIZE, MIN_TRAIN = 25, 20
 
 
-def run(cfg, out):
+def load_window_study(cfg):
+    """The window clip set (data/windows/manifest.csv) and its own split by source recording."""
     m = pd.read_csv(WINDOW_DATA / "manifest.csv")
     manifest = pd.DataFrame({"cls": m.common_name, "filename": m.clip_id + ".wav", "source": m.source_audio_path})
-    study = make_study(manifest, CLASSES, cfg, TEST_SIZE, MIN_TRAIN)
+    return make_study(manifest, CLASSES, cfg, TEST_SIZE, MIN_TRAIN)
+
+
+def run(cfg, out):
+    study = load_window_study(cfg)
     print_split_audit(study.partition, study.splits, SIZES)
 
     # Only the clips that are used: each class's test set and every training draw.

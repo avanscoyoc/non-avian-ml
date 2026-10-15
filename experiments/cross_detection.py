@@ -46,14 +46,22 @@ MAX_FOLDS = 5
 VERSIONS = {"headline": False, "all_data": True}  # results/cross_detection/{name}.csv -> trained on all clips?
 
 
+def cutoff_folds(labels, groups, seed) -> list[tuple[np.ndarray, np.ndarray]]:
+    """(train, validation) indices of the cutoff check's folds over one training draw: up to MAX_FOLDS, split by
+    recording. Empty if either label's clips come from a single recording (the cutoff then stays at 0.5)."""
+    y, g = np.asarray(labels), np.asarray(groups)
+    k = min(MAX_FOLDS, len(set(g[y == 1])), len(set(g[y == 0])))
+    return list(StratifiedGroupKFold(k, shuffle=True, random_state=seed).split(y, y, g)) if k >= 2 else []
+
+
 def oof_threshold(X, rows, labels, groups, cfg, seed) -> float:
     """Cutoff maximising F1 on out-of-fold scores, folds split by recording (training clips only)."""
-    rows, y, g = np.asarray(rows), np.asarray(labels), np.asarray(groups)
-    k = min(MAX_FOLDS, len(set(g[y == 1])), len(set(g[y == 0])))
-    if k < 2:
+    rows, y = np.asarray(rows), np.asarray(labels)
+    folds = cutoff_folds(y, groups, seed)
+    if not folds:
         return THRESHOLD
     oof = np.full(len(y), np.nan)
-    for fold, (tr, va) in enumerate(StratifiedGroupKFold(k, shuffle=True, random_state=seed).split(rows, y, g)):
+    for fold, (tr, va) in enumerate(folds):
         if len(set(y[tr])) < 2:
             continue
         head = train_heads(X, [rows[tr].tolist()], [y[tr].tolist()], batch_size=cfg.batch_size,
@@ -71,8 +79,9 @@ def oof_threshold(X, rows, labels, groups, cfg, seed) -> float:
     return float(best[len(best) // 2])
 
 
-def run(cfg, all_data: bool) -> pd.DataFrame:
-    study = load_study(cfg)
+def design(cfg, study, all_data: bool):
+    """The clips: one shared test set (every target class's test clips) and, per detector, N training clips of its
+    class + N negatives for each seed. Returns (classes, test files, their classes, N per class, draws per class)."""
     splits, partition = study.splits, study.partition
     classes = [c for c in cfg.classes if splits[c].test_pos]
     test_files = [f for c in classes for f in partition.test_clips[c]]
@@ -82,8 +91,14 @@ def run(cfg, all_data: bool) -> pd.DataFrame:
     else:
         sizes = {c: min(cfg.headline_n, max([n for n in cfg.training_sizes if n <= splits[c].max_n], default=0))
                  for c in classes}
-
     draws = {c: splits[c].draws(sizes[c], cfg.random_seeds) for c in classes if sizes[c]}
+    return classes, test_files, test_cls, sizes, draws
+
+
+def run(cfg, all_data: bool) -> pd.DataFrame:
+    study = load_study(cfg)
+    partition = study.partition
+    classes, test_files, test_cls, sizes, draws = design(cfg, study, all_data)
     files = test_files + [f for d in draws.values() for draw_files, _ in d for f in draw_files]
     rows = []
     for model in [m for m in MODELS if m in cfg.models]:

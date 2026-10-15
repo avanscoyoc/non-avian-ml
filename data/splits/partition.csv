@@ -1,4 +1,4 @@
-study,filename,class,source,split
+clip_set,filename,class,source,split
 main,nutria_1.wav,nutria,audio/nutria/clip_1.wav,train
 main,nutria_2.wav,nutria,audio/nutria/clip_1.wav,train
 main,nutria_3.wav,nutria,audio/nutria/clip_1.wav,train

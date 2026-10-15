@@ -14,7 +14,7 @@ core/           shared machinery, runs nothing itself: data split and training d
                 cache, classifier heads, plotting
 experiments/    one module per experiment in the brief; each saves results/<name>/ and draws its figures
 scripts/        data and setup utilities
-data/           metadata.csv and window manifests (tracked); audio clips from Zenodo (not in git)
+data/           metadata.csv, window manifests and splits/ (tracked); audio clips from Zenodo (not in git)
 cache/          model files and embeddings (not in git; rebuilt on demand, safe to delete)
 results/        every number behind the brief
 figs/           every figure in the brief
@@ -47,7 +47,9 @@ Shared design (`core/`):
 
 - **One split by source recording**, used by every experiment (`core/data.py`, `core/study.py`). Clips cut from the
   same recording sound alike, so every recording is either a test or a training recording, never both. Each class
-  has the same test clips in every experiment, and the same training draw for a given N and seed.
+  has the same test clips in every experiment, and the same training draw for a given N and seed. The exact
+  training and test clips of every experiment are in [`data/splits/`](data/splits/README.md), checked against
+  the code before each run (`pixi run check-splits`).
 - **Frozen encoders** (`core/encoders.py`). Each clip is embedded once per model and cached (`core/embeddings.py`).
 - **Heads** (`core/heads.py`). MLP Linear → 256 → 64 → 2, dropout 0.3, Adam, 20 epochs, batch 32. Each training
   size N is repeated with 10 random training draws; results are means with 95% CIs across draws.

@@ -60,17 +60,26 @@ def evaluate(probs: np.ndarray, y: np.ndarray, n_classes: int) -> dict:
             "macro_f1": float(np.nanmean(f1))}
 
 
-def run_model(model, classes, study, cfg, out):
+def design(cfg, study):
+    """The clips: classes with at least headline_n (N) training clips; their test clips and class indices; and per
+    seed one training set, each class's N positive clips from its binary N-clip draw. Returns (classes, classes
+    waiting for data with their training clip counts, test files, test class indices, training sets)."""
+    waiting = {c: len(s.train_pos) for c, s in study.splits.items() if len(s.train_pos) < cfg.headline_n}
+    classes = [c for c in cfg.classes if c not in waiting]
     test_files = [f for c in classes for f in study.partition.test_clips[c]]
     y_test = np.array([i for i, c in enumerate(classes) for _ in study.partition.test_clips[c]])
     n = cfg.headline_n
     draws = [([f for c in classes for f in positives(study.splits[c], n, seed)],
               [i for i, c in enumerate(classes) for _ in range(n)]) for seed in cfg.random_seeds]
+    return classes, waiting, test_files, y_test, draws
+
+
+def run_model(model, classes, test_files, y_test, draws, study, cfg, out):
     table, X = study.embed(model, test_files + [f for files, _ in draws for f in files])
     test_rows = table.rows(test_files)
 
     heads = train_heads(X, [table.rows(f) for f, _ in draws], [l for _, l in draws], n_classes=len(classes),
-                        batch_size=cfg.batch_size, n_epochs=cfg.n_epochs, seed=n)
+                        batch_size=cfg.batch_size, n_epochs=cfg.n_epochs, seed=cfg.headline_n)
     rows, cms = [], []
     for seed, probs in zip(cfg.random_seeds, predict_heads(heads, X, test_rows)):
         m = evaluate(probs, y_test, len(classes))
@@ -91,10 +100,9 @@ def run_model(model, classes, study, cfg, out):
 
 def run(cfg, models, out):
     study = load_study(cfg)
-    waiting = {c: len(s.train_pos) for c, s in study.splits.items() if len(s.train_pos) < cfg.headline_n}
+    classes, waiting, test_files, y_test, draws = design(cfg, study)
     if waiting:
         print(f"Waiting for more data (fewer than {cfg.headline_n} training clips): {waiting}")
-    classes = [c for c in cfg.classes if c not in waiting]
     test_n = [len(study.partition.test_clips[c]) for c in classes]
     out.mkdir(parents=True, exist_ok=True)
     (out / "classes.json").write_text(json.dumps({"classes": classes, "test_n": test_n}))
@@ -103,7 +111,7 @@ def run(cfg, models, out):
         if (out / f"{model}.csv").exists():
             print(f"  {model}: done (delete results/multiclass/{model}.csv to rerun)")
             continue
-        run_model(model, classes, study, cfg, out)
+        run_model(model, classes, test_files, y_test, draws, study, cfg, out)
 
     dfs = [pd.read_csv(out / f"{m}.csv") for m in MODEL_NAMES if (out / f"{m}.csv").exists()]
     agg = pd.concat(dfs).groupby(["model", "class"])[["ovr_auc", "f1", "macro_f1"]].agg(["mean", "std"])
