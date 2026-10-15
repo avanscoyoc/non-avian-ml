@@ -29,7 +29,7 @@ old/            superseded material, kept locally (not in git)
 | Training size (saturation) and zero-shot | Figures 1, 2, S1 | `pixi run saturation` | `saturation_main`, `saturation_summary`, `saturation_low_sample` |
 | Linear probe vs MLP head | Figure S2 | `pixi run linear-probe` | `head_comparison` |
 | Binary cross-detection | Figures 3, S3, cutoff note | `pixi run cross-detection` | `cross_detection`, `cross_detection_all_data` |
-| One multiclass head | Figures 4–6 | `pixi run multiclass` | `confusion_matrices_noise`, `tsne_embeddings_noise`, `binary_vs_multiclass_auc_noise` |
+| One multiclass head | Figures 4–6 | `pixi run multiclass` | `confusion_matrices`, `tsne_embeddings`, `binary_vs_multiclass_auc` |
 | Input window length (BirdNET 3.0) | Figure 7, Table S3 | `pixi run window-length` | `window_size` |
 
 Each experiment writes to `results/<experiment>/` (outputs are listed at the top of its module), skips work whose

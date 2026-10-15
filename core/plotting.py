@@ -42,8 +42,12 @@ def model_name(model: str) -> str:
     return MODELS.get(model, (model, None, None))[0]
 
 
+CLASS_NAMES = {"human_non_vocal": "Human non-vocal"}  # display names that sentence case alone gets wrong
+
+
 def class_name(cls: str) -> str:
-    return cls.replace("_", " ").capitalize()
+    """Display name in sentence case: 'device_static' -> 'Device static'."""
+    return CLASS_NAMES.get(cls, cls.replace("_", " ").capitalize())
 
 
 def style_axes(ax):

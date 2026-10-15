@@ -38,7 +38,7 @@ from sklearn.model_selection import StratifiedGroupKFold
 from core.config import load_config
 from core.heads import predict_heads, train_heads
 from core.paths import CONFIG
-from core.plotting import MODELS, PANEL_STYLE, draw_matrix, model_name, panel_grid, save
+from core.plotting import MODELS, PANEL_STYLE, class_name, draw_matrix, model_name, panel_grid, save
 from core.study import load_study
 
 THRESHOLD = 0.5  # cutoff for the figures; also the tuned check's fallback
@@ -114,7 +114,7 @@ def plot(cfg, df: pd.DataFrame, all_data: bool):
     n_cols = min(3, len(models))
     test_n = df.drop_duplicates("test_class").set_index("test_class").test_n
     det_n = df.drop_duplicates("detector").set_index("detector").detector_n
-    names = [c.replace("_", " ") for c in classes]
+    names = [class_name(c) for c in classes]
     with plt.rc_context(PANEL_STYLE):
         fig, axes = panel_grid(len(models), 5.6, 5.4)
         for k, (ax, model) in enumerate(zip(axes, models)):

@@ -12,8 +12,8 @@ Outputs in results/multiclass/:
   test_embeddings_{model}.npz   test-clip embeddings + labels, for the t-SNE figure
   classes.json                  class names (index order) and test clips per class
   summary.csv                   mean and SD over seeds per model x class
-Figures (after experiments.saturation, for the binary AUCs): binary_vs_multiclass_auc_noise (Figure 6),
-confusion_matrices_noise (Figure 4), tsne_embeddings_noise (Figure 5).
+Figures (after experiments.saturation, for the binary AUCs): binary_vs_multiclass_auc (Figure 6),
+confusion_matrices (Figure 4), tsne_embeddings (Figure 5).
 
 Usage:
     pixi run multiclass                                  # fit the models not done yet, then plot
@@ -140,13 +140,13 @@ def fig_binary_vs_multiclass(cfg, out, classes):
             ax.set_xlabel(f"Binary AUC (N={n})"); ax.set_ylabel("Multiclass one-vs-rest AUC")
         handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="outside lower center", ncol=min(len(labels), 4), frameon=False)
-        save(fig, cfg.figs_path / "binary_vs_multiclass_auc_noise")
+        save(fig, cfg.figs_path / "binary_vs_multiclass_auc")
 
 
 def fig_confusion_matrices(cfg, out, classes, test_n):
     """Figure 4: row-normalised confusion matrices (counts pooled over the draws; rows sum to 1)."""
     models = [m for m in MODELS if (out / f"confusion_{m}.npy").exists()]
-    names = [c.replace("_", " ") for c in classes]
+    names = [class_name(c) for c in classes]
     with plt.rc_context(PANEL_STYLE):
         fig, axes = panel_grid(len(models), 3.6, 3.6)
         for k, (ax, model) in enumerate(zip(axes, models)):
@@ -163,7 +163,7 @@ def fig_confusion_matrices(cfg, out, classes, test_n):
             ax.set_title(model_name(model), fontsize=9)
         fig.colorbar(im, ax=axes[:len(models)].tolist(), shrink=0.6,
                      label="Proportion of a class's test clips (diagonal = recall), 10 draws pooled")
-        save(fig, cfg.figs_path / "confusion_matrices_noise")
+        save(fig, cfg.figs_path / "confusion_matrices")
 
 
 def fig_tsne(cfg, out, classes, perplexity: int = 30, seed: int = 0):
@@ -189,7 +189,7 @@ def fig_tsne(cfg, out, classes, perplexity: int = 30, seed: int = 0):
         handles, labels = axes[0].get_legend_handles_labels()
         fig.legend(handles, labels, loc="outside lower center", ncol=min(len(labels), 4), frameon=False,
                    markerscale=2, title="★ = class centroid")
-        save(fig, cfg.figs_path / "tsne_embeddings_noise")
+        save(fig, cfg.figs_path / "tsne_embeddings")
 
 
 def plot(cfg, out):

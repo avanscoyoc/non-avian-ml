@@ -60,12 +60,12 @@
 | Fireworks | Perch 2.0 | known | 1.0 |  |  | 1.0 | 5 | 5 |  | tie at ceiling | True | 2 | 7 |
 | Fireworks | CNN14 (AudioSet) | known | 1.0 |  |  | 1.0 | 5 | 5 |  | tie at ceiling | True | 2 | 7 |
 | Fireworks | ResNet-18 (ImageNet) | new |  |  |  | 0.992 | 5 | 5 |  |  | True | 2 | 7 |
-| Human non vocal | BirdNET 2.4 | known | 0.889 |  |  | 1.0 | 5 | 5 | 5.0 | adaptation beats label | True | 1 | 5 |
-| Human non vocal | BirdNET 3.0 | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
-| Human non vocal | Perch v8 | new |  |  |  | 0.978 | 5 | 5 |  |  | True | 1 | 5 |
-| Human non vocal | Perch 2.0 | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
-| Human non vocal | CNN14 (AudioSet) | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
-| Human non vocal | ResNet-18 (ImageNet) | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
+| Human non-vocal | BirdNET 2.4 | known | 0.889 |  |  | 1.0 | 5 | 5 | 5.0 | adaptation beats label | True | 1 | 5 |
+| Human non-vocal | BirdNET 3.0 | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
+| Human non-vocal | Perch v8 | new |  |  |  | 0.978 | 5 | 5 |  |  | True | 1 | 5 |
+| Human non-vocal | Perch 2.0 | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
+| Human non-vocal | CNN14 (AudioSet) | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
+| Human non-vocal | ResNet-18 (ImageNet) | new |  |  |  | 1.0 | 5 | 5 |  |  | True | 1 | 5 |
 | Wind | BirdNET 2.4 | new |  | 0.976 | 0.002 | 0.981 | 160 | 10 |  |  | False | 94 | 453 |
 | Wind | BirdNET 3.0 | new |  | 0.956 | 0.011 | 0.956 | 40 | 20 |  |  | False | 94 | 453 |
 | Wind | Perch v8 | new |  | 0.968 | 0.007 | 0.979 | 160 | 40 |  |  | False | 94 | 453 |

@@ -178,7 +178,7 @@ same 40 clips per class as the binary detectors, using the seven classes with at
 
 Macro F1 ranged from 0.43 (ResNet-18) to 0.55 (Perch 2.0).
 
-:::{figure} ../figs/confusion_matrices_noise.pdf
+:::{figure} ../figs/confusion_matrices.pdf
 :label: fig-confusion
 :width: 100%
 **The multiclass head recognises wind reliably but spreads generator and power tools across other noise classes.** Row-normalised confusion matrices for a 7-class MLP head per model. Each head was trained on the same 40 clips per class as the binary detectors and evaluated on the same test clips (number of test clips per true class in brackets). Counts are pooled over 10 random training draws, and the outlined diagonal is recall. Only classes with at least 40 training clips are included.
@@ -189,7 +189,7 @@ Macro F1 ranged from 0.43 (ResNet-18) to 0.55 (Perch 2.0).
 The same structure is visible before any classifier is trained (**Figure 5**). Device static forms a compact group
 in most models, whereas generator, traffic, engine and power tools overlap in every model's embedding.
 
-:::{figure} ../figs/tsne_embeddings_noise.pdf
+:::{figure} ../figs/tsne_embeddings.pdf
 :label: fig-tsne
 :width: 100%
 **Device static forms a compact group in most embeddings, while the mechanical noise classes overlap.** Two-dimensional t-SNE projections (perplexity 30) of the frozen embeddings of the 329 test clips in the multiclass experiment, one panel per model. Each point is a clip, coloured by class, and stars mark class centroids in the projection. No classifier is involved. t-SNE preserves local neighbourhoods but not global distances, so only the grouping should be interpreted.
@@ -202,7 +202,7 @@ class–model pairs, the multiclass one-vs-rest AUC differed from the binary AUC
 +0.10). The largest drops were for device static (down to −0.14). Wind is a hard negative for device static, and it
 makes up the multiclass negatives but only a small share of the binary ones.
 
-:::{figure} ../figs/binary_vs_multiclass_auc_noise.pdf
+:::{figure} ../figs/binary_vs_multiclass_auc.pdf
 :label: fig-binary-multiclass
 :width: 85%
 **Binary detectors and the multiclass head discriminate each class about equally well.** Binary detector AUC at N = 40 (x-axis) against the multiclass head's one-vs-rest AUC (y-axis), each a mean over 10 random training draws. Each point is one class, and the dashed line marks equal performance. Both classifiers were trained on the same 40 clips per class and evaluated on the same positive test clips. Binary negatives are drawn from all other classes, including animal sounds, whereas multiclass negatives are the test clips of the other six noise classes.

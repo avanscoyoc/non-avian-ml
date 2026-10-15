@@ -113,7 +113,7 @@
   \item Groups: impulsive sounds, wind and thunder, vehicles}
 
 \sidefig{Figure 4 \textperiodcentered{} Multiclass}{One head recognises wind, not generator or power tools}
-  {confusion_matrices_noise.pdf}{0.68}{0.29}{%
+  {confusion_matrices.pdf}{0.68}{0.29}{%
   \item 7 classes with $\geq$ 40 training clips
   \item Wind recall 0.90--0.97
   \item Generator and power tools 0.13--0.32, mostly called traffic or engine
@@ -121,13 +121,13 @@
   \item Macro F1 0.43--0.55}
 
 \sidefig{Figure 5 \textperiodcentered{} Embeddings}{The confusions are already in the embeddings}
-  {tsne_embeddings_noise.pdf}{0.68}{0.29}{%
+  {tsne_embeddings.pdf}{0.68}{0.29}{%
   \item t-SNE of raw test-clip embeddings; no classifier
   \item Device static is compact in most models
   \item Generator, traffic, engine and power tools overlap}
 
 \sidefig{Figure 6 \textperiodcentered{} Binary vs multiclass}{Both discriminate each class about equally well}
-  {binary_vs_multiclass_auc_noise.pdf}{0.62}{0.35}{%
+  {binary_vs_multiclass_auc.pdf}{0.62}{0.35}{%
   \item Same 40 training clips and the same positive test clips
   \item Mean difference $-0.002$ (range $-0.14$ to $+0.10$)
   \item Largest drop: device static, for which wind is a hard negative}

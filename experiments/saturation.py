@@ -208,7 +208,7 @@ def plot_curves(df, classes, path, label_map, suptitle=None):
                             mec=color, mew=1.8, linestyle="none", zorder=4)
 
             test_n = class_data["test_size_per_class"].iloc[0]
-            title = cls.replace("_", " ").title()
+            title = class_name(cls)
             if test_n != 50:
                 title += f" (test n={test_n})"
             knowers = [model_name(m).split(" (")[0] for m in MODELS if label_map.get(cls, {}).get(m)]

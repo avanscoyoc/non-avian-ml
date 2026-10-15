@@ -12,6 +12,7 @@ import sys
 from core.config import load_config
 from core.data import check_data
 from core.paths import CONFIG
+from core.plotting import class_name
 from core.study import load_study
 
 
@@ -26,7 +27,7 @@ def partition_table(study, cfg) -> str:
         test_recs = {p.source[f] for f in p.test_clips[c]}
         train_recs = {p.source[f] for f in p.train_clips[c]}
         max_n = max([n for n in cfg.training_sizes if n <= len(p.train_clips[c])], default=0)
-        name = c.replace('_', ' ').capitalize() + (" *" if c in p.low_sample else "")
+        name = class_name(c) + (" *" if c in p.low_sample else "")
         lines.append(f"| {name} | {types.get(c, '')} | {d.source.nunique()} / {len(d)} | "
                      f"{len(test_recs)} / {len(p.test_clips[c])} | {len(train_recs)} / {len(p.train_clips[c])} | {max_n} |")
     n_recs = manifest.source.nunique()
