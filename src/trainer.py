@@ -33,18 +33,6 @@ class HeadEnsemble(nn.Module):
                 x = F.dropout(F.relu(x), DROPOUT, self.training)
         return x
 
-    def head(self, i: int) -> nn.Sequential:
-        """Head i as the original nn.Sequential (for saving classifier bundles)."""
-        layers = []
-        for j, (w, b) in enumerate(zip(self.weights, self.biases)):
-            lin = nn.Linear(w.shape[1], w.shape[2])
-            lin.weight.data = w[i].detach().T.clone().cpu()
-            lin.bias.data = b[i, 0].detach().clone().cpu()
-            layers.append(lin)
-            if j < len(self.weights) - 1:
-                layers += [nn.ReLU(), nn.Dropout(DROPOUT)]
-        return nn.Sequential(*layers)
-
 
 def train_heads(X: torch.Tensor, rows: list[list[int]], labels: list[list[int]], *, n_classes: int = 2,
                 batch_size: int = 32, n_epochs: int = 20, lr: float = 1e-3, seed: int = 0) -> HeadEnsemble:

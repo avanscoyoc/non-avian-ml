@@ -82,10 +82,6 @@ class Encoder:
         emb /= np.linalg.norm(emb, axis=1, keepdims=True) + 1e-8
         return emb, (np.concatenate(scores) if scores else None)
 
-    def extract_embeddings(self, path) -> torch.Tensor:
-        """Single clip -> (1, dim) tensor (used by the multiclass/binary scripts)."""
-        return torch.from_numpy(self.encode([path])[0])
-
     def cleanup(self):
         pass
 

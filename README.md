@@ -241,16 +241,6 @@ the comparison is paired clip-for-clip. Only clips used for testing or training 
 | Field cricket | pulsed | 539 (103) |
 | Pacific chorus frog | pulsed | 705 (41) |
 
-## Deployment classifiers
-
-```bash
-pixi run python scripts/train_multiclass_birdnet.py    # or train_multiclass_perch.py
-pixi run python scripts/train_binary_anthro_birdnet.py # anthropogenic vs natural; or train_binary_anthro_perch.py
-```
-
-Trained classifier bundles (weights, labels, preprocessing, embedding-model info) are saved to
-`results/classifiers/`. These scripts still use clip-level train/test splits.
-
 ## Citation
 
 ```bibtex

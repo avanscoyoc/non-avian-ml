@@ -10,5 +10,4 @@ birdnet3_windows
 test_audio
 results
 tmp
-classifiers_for_cdfw
 models/

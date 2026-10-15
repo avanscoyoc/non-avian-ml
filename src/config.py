@@ -29,8 +29,6 @@ class Config:
     clips_csv: Path = CLIPS_CSV
     results_path: Path = RESULTS
     embeddings_path: Path = RESULTS / "embeddings"
-    save_classifier: bool = False
-    species_sizes: Optional[Dict[str, Dict[str, int]]] = None
     run_zeroshot: bool = True
 
 
@@ -39,13 +37,11 @@ def load_config(config_path: str = "config.yaml") -> Config:
         data = yaml.safe_load(f)
 
     exp = data["experiments"][0]
-    species_sizes = exp.get("species_sizes", None)
-    species = exp.get("species", list(species_sizes.keys()) if species_sizes else [])
     data_path = resolve(exp.get("data_path", DATA))
     results_path = resolve(exp.get("results_path", RESULTS))
     return Config(
         models=exp["models"],
-        species=species,
+        species=exp["species"],
         training_sizes=exp.get("training_sizes", None),
         n_epochs=exp.get("n_epochs", 20),
         test_size_per_class=exp.get("test_size_per_class", 50),
@@ -63,8 +59,6 @@ def load_config(config_path: str = "config.yaml") -> Config:
         clips_csv=resolve(exp.get("clips_csv", data_path / CLIPS_CSV.name)),
         results_path=results_path,
         embeddings_path=resolve(exp.get("embeddings_path", results_path / "embeddings")),
-        save_classifier=exp.get("save_classifier", False),
-        species_sizes=species_sizes,
         run_zeroshot=exp.get("run_zeroshot", True),
     )
 

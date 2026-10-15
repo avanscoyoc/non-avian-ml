@@ -73,7 +73,7 @@ def run(cfg):
     clips = sorted((cls_of[f], f) for f in needed)
     print(f"{len(clips)} clips needed per window size")
 
-    cfg.run_zeroshot, cfg.save_classifier = False, False
+    cfg.run_zeroshot = False
     device = torch_device()
     for w, seconds in WINDOWS.items():
         runs_dir, preds_dir = OUT / "runs" / w, OUT / "predictions" / w

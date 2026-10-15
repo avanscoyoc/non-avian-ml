@@ -30,9 +30,7 @@ from src.embeddings import get_embeddings
 from src.model_loader import MODEL_NAMES, torch_device
 from src.trainer import predict_heads, train_heads
 from src.zero_shot import load_label_map, match_labels, zero_shot_scores
-from src.results import (
-    aggregate_results, plot_species_models, save_classifier_bundle, save_predictions, save_results, save_runs,
-)
+from src.results import aggregate_results, plot_species_models, save_predictions, save_results, save_runs
 
 
 def run_class(species, model_name, X, table, split, sizes, cfg, label_map, low_sample=False):
@@ -61,12 +59,6 @@ def run_class(species, model_name, X, table, split, sizes, cfg, label_map, low_s
         aucs = [record(size, seed, p[:, 1]) for seed, p in zip(cfg.random_seeds, probs)]
         for k, seed in enumerate(cfg.random_seeds):
             rows.append({**base, "training_size": size, "random_seed": seed, "test_auc": aucs[k]})
-            if cfg.save_classifier:
-                save_classifier_bundle(
-                    classifier=heads.head(k), embedding_model=None, model_name=model_name, species=species,
-                    training_size=size, random_seed=seed, test_auc=aucs[k], n_epochs=cfg.n_epochs,
-                    results_path=cfg.results_path,
-                )
         print(f"  {species:20s} N={size:<4d} test AUC {np.mean(aucs):.3f} ± {np.std(aucs):.3f}")
 
     wanted = label_map.get(species, {}).get(model_name)
@@ -111,18 +103,14 @@ def main():
     partition = build_partition(manifest, cfg)
     if args.species and set(args.species) - set(cfg.species):
         parser.error(f"--species must be in the config's species list: {sorted(set(args.species) - set(cfg.species))}")
-    splits, sizes = {}, {}
+    splits = {}
     for sp in args.species or cfg.species:
         split = binary_split(partition, sp, cfg.split_seed)
         if not split.test_pos:
             print(f"Skipping {sp}: no recordings could be held out for testing")
             continue
         splits[sp] = split
-        if cfg.species_sizes and sp in cfg.species_sizes:
-            sizes[sp] = [min(cfg.species_sizes[sp]["train"], split.max_n)]
-        else:
-            sizes[sp] = cfg.training_sizes
-    print_split_audit(partition, splits, sorted({n for s in sizes.values() for n in s}))
+    print_split_audit(partition, splits, cfg.training_sizes)
 
     label_map = load_label_map() if cfg.run_zeroshot else {}
     runs_dir, preds_dir = cfg.results_path / "runs", cfg.results_path / "predictions"
@@ -142,7 +130,7 @@ def main():
         X = torch.from_numpy(np.ascontiguousarray(table.emb)).to(device)
         print(f"[{model_name}] training heads on {device}")
         for sp in todo:
-            rows, pred_rows = run_class(sp, model_name, X, table, splits[sp], sizes[sp], cfg, label_map,
+            rows, pred_rows = run_class(sp, model_name, X, table, splits[sp], cfg.training_sizes, cfg, label_map,
                                         low_sample=sp in partition.low_sample)
             save_predictions(pred_rows, preds_dir, sp, model_name)
             save_runs(rows, runs_dir, sp, model_name)  # written last: marks the class x model as done

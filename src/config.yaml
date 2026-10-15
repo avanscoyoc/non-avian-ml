@@ -51,5 +51,4 @@ experiments:
   data_path: data
   results_path: results
   embeddings_path: results/embeddings
-  save_classifier: false
   run_zeroshot: true

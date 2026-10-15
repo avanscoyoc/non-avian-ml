@@ -1,13 +1,8 @@
-import pandas as pd
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-import torch
-import json
-import shutil
-from datetime import datetime
-
-from src import model_files
+import pandas as pd
 
 
 def save_runs(rows, runs_dir, species, model):
@@ -108,107 +103,3 @@ def plot_species_models(df, output_path):
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close()
-
-
-# (model_info, preprocessing) per encoder: the layer the classifier head expects as input.
-ENCODER_INFO = {
-    "birdnet": ({"type": "birdnet", "version": "2.4 (TFLite FP32)", "embedding_dim": 1024,
-                 "embedding_layer": "model/GLOBAL_AVG_POOL/Mean"},
-                {"sample_rate": 48000, "duration_s": 3.0}),
-    "birdnet3": ({"type": "birdnet", "version": "3.0-preview3.1", "embedding_dim": 1280,
-                  "source": "birdnet python package, pt backend"},
-                 {"sample_rate": 32000, "duration_s": 3.0}),
-    "perch": ({"type": "perch", "version": "v8", "embedding_dim": 1280, "embedding_layer": "embedding"},
-              {"sample_rate": 32000, "duration_s": 5.0, "padding": "3 s clip centre-padded to 5 s"}),
-    "perch2": ({"type": "perch", "version": "2.0", "embedding_dim": 1536, "embedding_layer": "embedding",
-                "source": "birdnet python package, cpu SavedModel"},
-               {"sample_rate": 32000, "duration_s": 5.0, "padding": "3 s clip centre-padded to 5 s"}),
-    "cnn14": ({"type": "panns_cnn14", "embedding_dim": 2048, "embedding_layer": "fc1",
-               "weights": "Cnn14_mAP=0.431.pth"},
-              {"sample_rate": 32000, "duration_s": 3.0}),
-    "resnet": ({"type": "resnet18", "embedding_dim": 512, "weights": "torchvision IMAGENET1K_V1"},
-               {"sample_rate": 16000, "duration_s": 3.0, "n_mels": 64, "n_fft": 400, "hop_length": 200,
-                "scaling": "per-clip min-max to [0,1], 3 channels, ImageNet mean/std"}),
-}
-
-
-def save_classifier_bundle(
-    classifier,
-    embedding_model,
-    model_name,
-    species,
-    training_size,
-    random_seed,
-    test_auc,
-    n_epochs,
-    results_path,
-    bundle_name=None,
-    labels=None,
-):
-    """Save complete classifier bundle for deployment.
-
-    The embedding model file is copied for BirdNET 2.4 and Perch v8; the other encoders are
-    public pretrained weights (see src/model_files.py), so model_info.json records which model and layer to use.
-
-    bundle_name: override the auto-generated directory name
-                 (defaults to "{species}_{model_name}_{training_size}")
-    labels:      override labels.json content; if None the default binary
-                 {"0": "absent", "1": "present", "species": species} is used
-    """
-    if model_name not in ENCODER_INFO:
-        raise ValueError(f"Unknown model: {model_name}")
-    if bundle_name is None:
-        bundle_name = f"{species}_{model_name}_{training_size}"
-    bundle_dir = Path(results_path) / "classifiers" / bundle_name
-    bundle_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"  Saving classifier bundle to: {bundle_dir}")
-
-    # 1. Save trained classifier
-    classifier_path = bundle_dir / "classifier.pth"
-    torch.save(classifier.state_dict(), classifier_path)
-
-    # 2. Save embedding model (or a pointer to it)
-    embedding_dir = bundle_dir / "embedding_model"
-    embedding_dir.mkdir(exist_ok=True)
-    if model_name == "birdnet":
-        shutil.copy2(model_files.birdnet_v2_4()[0], embedding_dir / "model.tflite")
-    elif model_name == "perch":
-        shutil.copytree(model_files.perch_v8(), embedding_dir, dirs_exist_ok=True)
-
-    model_info, preprocessing = ENCODER_INFO[model_name]
-    with open(embedding_dir / "model_info.json", "w") as f:
-        json.dump(model_info, f, indent=2)
-
-    # 3. Save config.json
-    config = {
-        "species": species,
-        "model_name": model_name,
-        "training_size": training_size,
-        "embedding_dim": model_info["embedding_dim"],
-        "seed": random_seed,
-        "test_auc": float(test_auc),
-        "n_epochs": n_epochs,
-        "created_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    with open(bundle_dir / "config.json", "w") as f:
-        json.dump(config, f, indent=2)
-
-    # 4. Save preprocessing.json
-    with open(bundle_dir / "preprocessing.json", "w") as f:
-        json.dump(preprocessing, f, indent=2)
-
-    # 5. Save labels.json
-    if labels is None:
-        labels = {
-            "0": "absent",
-            "1": "present",
-            "species": species,
-        }
-    with open(bundle_dir / "labels.json", "w") as f:
-        json.dump(labels, f, indent=2)
-
-    print(f"  Classifier bundle saved successfully!")
-    print(f"    - Classifier: {classifier_path.name}")
-    print(f"    - Embedding model: {embedding_dir.name}/")
-    print(f"    - Metadata: config.json, preprocessing.json, labels.json")
