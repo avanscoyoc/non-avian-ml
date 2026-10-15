@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 power_tools,perch,20,32,29,False,5,1,0.6801426872770512
 power_tools,perch,20,32,29,False,5,2,0.5683709869203329
 power_tools,perch,20,32,29,False,5,3,0.66230677764566

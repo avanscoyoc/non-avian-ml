@@ -1,4 +1,4 @@
-model,species,training_size,n_epochs,batch_size,test_size_per_class,low_sample,test_auc_mean,test_auc_std,test_auc_ci_95,test_auc_n
+model,class,training_size,n_epochs,batch_size,test_size_per_class,low_sample,test_auc_mean,test_auc_std,test_auc_ci_95,test_auc_n
 birdnet,device_static,5,20,32,50,False,0.7211,0.1586,0.0983,10
 birdnet,device_static,10,20,32,50,False,0.7939,0.0964,0.0597,10
 birdnet,device_static,20,20,32,50,False,0.8294,0.0654,0.0405,10

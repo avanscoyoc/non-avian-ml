@@ -56,17 +56,17 @@ def main():
         table, _ = study.embed(model, [f for s in study.splits.values() for f in s.train_pos + s.train_neg])
         labels = table.labels
         lines += [f"## {model} ({len(labels)} labels)", ""]
-        for sp in cfg.species:
-            s = study.splits[sp]
+        for c in cfg.classes:
+            s = study.splits[c]
             files = s.train_pos + s.train_neg
             y = np.array([1] * len(s.train_pos) + [0] * len(s.train_neg))
             scores = np.asarray(table.scores)[table.rows(files)]
-            lines.append(f"### {sp} — {model}")
+            lines.append(f"### {c} — {model}")
             for section, m in (("mapping", mapping), ("candidate", candidates)):
-                wanted = m.get(sp, {}).get(model)
+                wanted = m.get(c, {}).get(model)
                 if wanted:
                     lines.append(f"- {section} {wanted}: AUC {label_auc(labels, scores, y, wanted)}")
-            if not mapping.get(sp, {}).get(model):
+            if not mapping.get(c, {}).get(model):
                 lines.append("- no mapped label (no N=0 point)")
             mean_pos = scores[y == 1].mean(axis=0)
             top_heard = np.argsort(-mean_pos)[:10]

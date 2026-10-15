@@ -45,7 +45,7 @@ def run(cfg) -> pd.DataFrame:
         table, _ = study.embed(model, files)
         E = np.ascontiguousarray(table.emb)
         for c, s in study.splits.items():
-            mlp = auc[(auc.species == c) & (auc.model == model)].set_index("training_size")
+            mlp = auc[(auc["class"] == c) & (auc.model == model)].set_index("training_size")
             test_rows = table.rows(s.test_pos + s.test_neg)
             test_labels = [1] * len(s.test_pos) + [0] * len(s.test_neg)
             for n in cfg.training_sizes:

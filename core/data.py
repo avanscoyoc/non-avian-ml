@@ -99,7 +99,7 @@ class Partition:
 
 
 def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int, seed: int,
-                   max_test_recording_clips: int, min_train: int, donor_test_fraction: float,
+                   max_test_recording_clips: int, min_train: int, negative_test_fraction: float,
                    low_sample_test_fraction: float) -> Partition:
     """Hold out whole recordings once, shared by the binary and multiclass experiments.
 
@@ -111,8 +111,8 @@ def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int, s
     Low-sample classes (fewer than `test_size + min_train` clips) use the same rule with a smaller
     target: about `low_sample_test_fraction` of their clips go to test and the rest are kept for training.
     Everything follows from the manifest, so a class moves to the full design once it has enough clips.
-    Donor-only classes with >= 2 recordings get ~`donor_test_fraction` of their clips held out, so test
-    negatives stay balanced across donors.
+    Negative-only classes with >= 2 recordings get ~`negative_test_fraction` of their clips held out, so test
+    negatives stay balanced across those classes.
     """
     rng = random.Random(seed)
     size = manifest.groupby("source").size()
@@ -161,7 +161,7 @@ def make_partition(manifest: pd.DataFrame, classes: list[str], test_size: int, s
             continue
         rng.shuffle(recs)
         for rec in recs:
-            if n_test[c] >= donor_test_fraction * total[c]:
+            if n_test[c] >= negative_test_fraction * total[c]:
                 break
             if rec not in test and safe(rec):
                 hold_out(rec)
@@ -206,7 +206,7 @@ class Split:
 
 
 def _quotas(available: dict[str, int], n: int) -> dict[str, int]:
-    """Equal quota per donor class; shortfalls go to the largest pools (build_negatives rule)."""
+    """Equal quota per negative class; shortfalls go to the largest pools."""
     quota = {d: 0 for d in available}
     remaining = n
     active = [d for d in sorted(available) if available[d] > 0]
@@ -245,7 +245,7 @@ def print_split_audit(partition: Partition, splits: dict[str, Split], training_s
     print(f"Shared partition: {len(partition.test_recordings)} test / {n_recs - len(partition.test_recordings)} "
           f"training recordings (of {n_recs})")
     print(f"{'class':22s} {'test pos/neg':>12s} {'test recs':>9s} {'train pos/neg':>13s} {'max N':>6s}")
-    for sp, s in splits.items():
+    for c, s in splits.items():
         feasible = [n for n in training_sizes if n <= s.max_n]
-        print(f"{sp:22s} {len(s.test_pos):>6d}/{len(s.test_neg):<5d} {s.n_test_recordings:>9d} "
+        print(f"{c:22s} {len(s.test_pos):>6d}/{len(s.test_neg):<5d} {s.n_test_recordings:>9d} "
               f"{len(s.train_pos):>6d}/{len(s.train_neg):<6d} {max(feasible, default=0):>6d}")

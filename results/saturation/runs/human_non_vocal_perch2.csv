@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 human_non_vocal,perch2,20,32,3,True,5,1,1.0
 human_non_vocal,perch2,20,32,3,True,5,2,1.0
 human_non_vocal,perch2,20,32,3,True,5,3,1.0

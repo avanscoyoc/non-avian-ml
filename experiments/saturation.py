@@ -48,7 +48,7 @@ CEILING = 0.97      # zero-shot and best AUC both at least this: a tie at the ce
 
 # ── Training ──────────────────────────────────────────────────────────────────
 
-def train(cfg, study, models: list[str], species: list[str]):
+def train(cfg, study, models: list[str], classes: list[str]):
     problems, notes = check_data(study.manifest, cfg.data_path)
     for note in notes:
         print(f"Note: {note}")
@@ -59,30 +59,30 @@ def train(cfg, study, models: list[str], species: list[str]):
         sys.exit(1)
 
     splits = {}
-    for sp in species:
-        if not study.splits[sp].test_pos:
-            print(f"Skipping {sp}: no recordings could be held out for testing")
+    for c in classes:
+        if not study.splits[c].test_pos:
+            print(f"Skipping {c}: no recordings could be held out for testing")
             continue
-        splits[sp] = study.splits[sp]
+        splits[c] = study.splits[c]
     print_split_audit(study.partition, splits, cfg.training_sizes)
 
     label_map = load_label_map()
     out = cfg.results_path / "saturation"
     for model in models:
-        todo = [sp for sp in splits if not (out / "runs" / f"{sp}_{model}.csv").exists()]
+        todo = [c for c in splits if not (out / "runs" / f"{c}_{model}.csv").exists()]
         if not todo:
             print(f"\n[{model}] all classes done (delete results/saturation/runs/*_{model}.csv to rerun)")
             continue
         print(f"\n{'=' * 80}\n[{model}] {len(todo)} classes\n{'=' * 80}")
         start = time.time()
-        table, X = study.embed(model, [f for sp in todo for s in [splits[sp]]
+        table, X = study.embed(model, [f for c in todo for s in [splits[c]]
                                        for f in s.train_pos + s.train_neg + s.test_pos + s.test_neg])
         print(f"[{model}] training heads on {X.device}")
-        for sp in todo:
-            rows, preds = run_class(sp, model, X, table, splits[sp], cfg.training_sizes, cfg,
-                                    label_map.get(sp, {}).get(model), low_sample=sp in study.partition.low_sample)
-            save_csv(preds, out / "predictions" / f"{sp}_{model}.csv.gz")
-            save_csv(rows, out / "runs" / f"{sp}_{model}.csv")  # written last: marks the class x model as done
+        for c in todo:
+            rows, preds = run_class(c, model, X, table, splits[c], cfg.training_sizes, cfg,
+                                    label_map.get(c, {}).get(model), low_sample=c in study.partition.low_sample)
+            save_csv(preds, out / "predictions" / f"{c}_{model}.csv.gz")
+            save_csv(rows, out / "runs" / f"{c}_{model}.csv")  # written last: marks the class x model as done
         del X
         print(f"[{model}] done in {time.time() - start:.0f}s")
 
@@ -94,10 +94,10 @@ def summarise(cfg, study, auc: pd.DataFrame) -> pd.DataFrame:
     labels = load_label_map()
     partition = study.partition
     rows = []
-    for c in cfg.species:
+    for c in cfg.classes:
         train_recs = len({partition.source[f] for f in partition.train_clips[c]})
         for m in [m for m in MODELS if m in cfg.models]:
-            d = auc[(auc.species == c) & (auc.model == m)].sort_values("training_size")
+            d = auc[(auc["class"] == c) & (auc.model == m)].sort_values("training_size")
             if d.empty:
                 continue
             trained = d[d.training_size > 0]
@@ -143,7 +143,7 @@ def write_summary(cfg, s: pd.DataFrame):
     print(f"Written: {out / 'summary.csv'} (+ .md)")
 
     known, full = s[s.label_status == "known"], s[~s.low_sample]
-    new_everywhere = [c for c in cfg.species if (s[s["class"] == c].label_status == "new").all()]
+    new_everywhere = [c for c in cfg.classes if (s[s["class"] == c].label_status == "new").all()]
     print(f"\nclass x model pairs: {len(s)} | with a built-in label (known): {len(known)} | new: {len(s) - len(known)}")
     print(f"classes no model knows: {new_everywhere}")
     print("known pairs by outcome:", known.outcome.value_counts().to_dict())
@@ -174,27 +174,27 @@ RAMP = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987
 VMIN, VMAX = 0.5, 1.0
 
 
-def plot_curves(df, species_list, path, label_map, suptitle=None):
+def plot_curves(df, classes, path, label_map, suptitle=None):
     """Test AUC against N per class (one panel each), mean and 95% CI band per model, zero-shot as open markers."""
     with plt.rc_context(CURVE_STYLE):
-        n_species = len(species_list)
-        n_cols = 3 if n_species > 6 else 2
-        n_rows = math.ceil(n_species / n_cols)
+        n_classes = len(classes)
+        n_cols = 3 if n_classes > 6 else 2
+        n_rows = math.ceil(n_classes / n_cols)
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows),
                                  sharex=True, sharey=True, squeeze=False)
         axes = axes.flatten()
-        for j in range(n_species, len(axes)):
+        for j in range(n_classes, len(axes)):
             axes[j].set_visible(False)
             axes[j - n_cols].xaxis.set_tick_params(labelbottom=True)  # panel above an empty slot keeps its x labels
 
         handles = {}
         sizes = sorted(s for s in df["training_size"].unique() if s > 0)
         zs_x = log2(sizes[0]) - ZS_GAP
-        for ax, species in zip(axes, species_list):
-            species_data = df[df["species"] == species]
-            for model in [m for m in MODELS if m in set(species_data["model"])]:
+        for ax, cls in zip(axes, classes):
+            class_data = df[df["class"] == cls]
+            for model in [m for m in MODELS if m in set(class_data["model"])]:
                 name, color, marker = MODELS[model]
-                model_data = species_data[species_data["model"] == model].sort_values("training_size")
+                model_data = class_data[class_data["model"] == model].sort_values("training_size")
                 trained = model_data[model_data["training_size"] > 0]
                 x = [log2(n) for n in trained["training_size"]]
                 y = trained["test_auc_mean"].to_numpy()
@@ -211,11 +211,11 @@ def plot_curves(df, species_list, path, label_map, suptitle=None):
                     ax.plot(zs_x, zero["test_auc_mean"].iloc[0], marker=marker, markersize=7.5, mfc="white",
                             mec=color, mew=1.8, linestyle="none", zorder=4)
 
-            test_n = species_data["test_size_per_class"].iloc[0]
-            title = species.replace("_", " ").title()
+            test_n = class_data["test_size_per_class"].iloc[0]
+            title = cls.replace("_", " ").title()
             if test_n != 50:
                 title += f" (test n={test_n})"
-            knowers = [model_name(m).split(" (")[0] for m in MODELS if label_map.get(species, {}).get(m)]
+            knowers = [model_name(m).split(" (")[0] for m in MODELS if label_map.get(cls, {}).get(m)]
             subtitle = ("built-in label: " + ", ".join(knowers)) if knowers else "no model has a built-in label"
             subtitle = textwrap.fill(subtitle, 44)
             ax.set_title(title, fontweight="semibold", pad=12 + 10 * subtitle.count("\n") + 10, color=INK)
@@ -248,8 +248,8 @@ def plot_heatmap(cfg, auc: pd.DataFrame, summary: pd.DataFrame):
     """Classes x models at the headline N (low-sample classes at their largest N); built-in labels outlined."""
     n_head = cfg.headline_n
     rows = []
-    for c in cfg.species:
-        r = auc[auc.species == c]
+    for c in cfg.classes:
+        r = auc[auc["class"] == c]
         for m in r.model.unique():
             t = r[(r.model == m) & (r.training_size > 0)]
             n = n_head if n_head in set(t.training_size) else int(t.training_size.max())
@@ -258,8 +258,8 @@ def plot_heatmap(cfg, auc: pd.DataFrame, summary: pd.DataFrame):
                                      on=["class", "model"])
     models = [m for m in MODELS if m in set(cells.model)]
     low = set(cells[cells.low_sample]["class"])
-    classes = [c for c in cfg.species if c in set(cells["class"]) and c not in low] + \
-              [c for c in cfg.species if c in low]
+    classes = [c for c in cfg.classes if c in set(cells["class"]) and c not in low] + \
+              [c for c in cfg.classes if c in low]
     cmap = LinearSegmentedColormap.from_list("blue_ramp", RAMP)
 
     fig, ax = plt.subplots(figsize=(1.35 * len(models) + 2.6, 0.62 * len(classes) + 1.6))
@@ -299,8 +299,8 @@ def plot(cfg):
     out = cfg.results_path / "saturation"
     auc = pd.read_csv(out / "auc_by_n.csv")
     label_map = load_label_map()
-    present = [c for c in cfg.species if c in set(auc.species)]
-    low = set(auc.loc[auc.low_sample.astype(bool), "species"])
+    present = [c for c in cfg.classes if c in set(auc["class"])]
+    low = set(auc.loc[auc.low_sample.astype(bool), "class"])
     groups = {"main": [c for c in present if c not in low], "low_sample": [c for c in present if c in low]}
     for group, classes in groups.items():
         if classes:
@@ -314,20 +314,20 @@ def main():
     parser.add_argument("--config", default=CONFIG)
     parser.add_argument("--models", nargs="+", choices=MODEL_NAMES, help="Run only these models (default: all in "
                         "the config). Lets CPU (TensorFlow) and GPU (PyTorch) models run as two parallel jobs.")
-    parser.add_argument("--species", nargs="+", help="Run only these classes (the split is still built from every "
+    parser.add_argument("--classes", nargs="+", help="Run only these classes (the split is still built from every "
                         "class in the config, so test sets are unchanged).")
     parser.add_argument("--plot", action="store_true", help="Only redraw the figures from saved results.")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)  # keep nohup/redirected logs complete
     cfg = load_config(args.config)
     if not args.plot:
-        if args.species and set(args.species) - set(cfg.species):
-            parser.error(f"--species must be in the config's species list: {sorted(set(args.species) - set(cfg.species))}")
+        if args.classes and set(args.classes) - set(cfg.classes):
+            parser.error(f"--classes must be in the config's classes list: {sorted(set(args.classes) - set(cfg.classes))}")
         study = load_study(cfg)
-        train(cfg, study, args.models or cfg.models, args.species or cfg.species)
+        train(cfg, study, args.models or cfg.models, args.classes or cfg.classes)
         print("\nAggregating results...")
         runs_dir = cfg.results_path / "saturation" / "runs"
-        auc = pd.concat([aggregate(r) for c in cfg.species if (r := load_runs(runs_dir, c)) is not None],
+        auc = pd.concat([aggregate(r) for c in cfg.classes if (r := load_runs(runs_dir, c)) is not None],
                         ignore_index=True)
         auc.to_csv(cfg.results_path / "saturation" / "auc_by_n.csv", index=False)
         write_summary(cfg, summarise(cfg, study, auc))

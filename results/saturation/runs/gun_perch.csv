@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 gun,perch,20,32,9,True,5,1,0.9382716049382716
 gun,perch,20,32,9,True,5,2,0.9506172839506173
 gun,perch,20,32,9,True,5,3,0.9012345679012346

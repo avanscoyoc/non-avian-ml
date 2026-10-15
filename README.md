@@ -56,7 +56,7 @@ Shared design (`core/`):
 
 ## Classes
 
-The 14 target classes are listed in `config.yaml` (`species`, grouped by `class_types`):
+The 14 target classes are listed in `config.yaml` (`classes`, grouped by `class_types`):
 
 - **Artificial noise:** device static, generator, traffic, engine, power tools, human vocal, metal clanging,
   airplane, gun, fireworks, human non-vocal
@@ -164,7 +164,7 @@ pixi run -e gpu experiments                # the rest (completed saturation runs
 
 Whichever saturation job finishes last writes the complete `results/saturation/auc_by_n.csv`. Completed
 class × model runs are skipped on restart, and cached embeddings are reused. On a CPU-only machine run a single
-job: parallel jobs there just compete for the same cores. `--species` runs a subset of classes on the same split.
+job: parallel jobs there just compete for the same cores. `--classes` runs a subset of classes on the same split.
 
 ## Citation
 

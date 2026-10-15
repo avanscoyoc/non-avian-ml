@@ -10,7 +10,7 @@ from core.paths import CONFIG, resolve
 @dataclass
 class Config:
     models: list[str]
-    species: list[str]
+    classes: list[str]
     class_types: dict[str, list[str]]
     training_sizes: list[int]
     headline_n: int
@@ -22,7 +22,7 @@ class Config:
     max_test_recording_clips: int
     min_train_clips: int
     low_sample_test_fraction: float
-    donor_test_fraction: float
+    negative_test_fraction: float
     data_path: Path
     clips_csv: Path
     embeddings_path: Path

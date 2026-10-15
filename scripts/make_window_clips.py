@@ -66,12 +66,12 @@ def main():
 
     for i, r in enumerate(rows, 1):
         clip_id = os.path.splitext(r["filename"])[0]
-        species = r["common_name"].replace("/", "-")
+        cls = r["common_name"].replace("/", "-")
         src = resolve(r["source_audio_path"])
         dur = duration(src) if src else None
         ev_s, ev_e = float(r["start_time"]), float(r["end_time"])
         center = (ev_s + ev_e) / 2
-        rec = {"clip_id": clip_id, "common_name": species,
+        rec = {"clip_id": clip_id, "common_name": cls,
                "source_audio_path": r["source_audio_path"],
                "recording_duration_s": dur, "event_start_s": ev_s,
                "event_end_s": ev_e, "event_len_s": round(ev_e - ev_s, 3),

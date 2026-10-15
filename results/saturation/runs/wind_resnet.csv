@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 wind,resnet,20,32,50,False,5,1,0.9536
 wind,resnet,20,32,50,False,5,2,0.974
 wind,resnet,20,32,50,False,5,3,0.9488000000000001

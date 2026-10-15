@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 device_static,cnn14,20,32,50,False,5,1,0.7552
 device_static,cnn14,20,32,50,False,5,2,0.6747999999999998
 device_static,cnn14,20,32,50,False,5,3,0.41279999999999994

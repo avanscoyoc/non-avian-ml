@@ -15,7 +15,7 @@ Clips for testing BirdNET+ V3.0 at 3 s, 5 s and 10 s window sizes (`experiments/
 
 - `source_audio_path` locates the recording in `audio/`.
 - `start_time` and `end_time` give the event in the recording; all three windows are centered on its midpoint, `(start_time + end_time) / 2`.
-- `common_name` sets the species folder and `filename` sets the clip name.
+- `common_name` sets the class folder and `filename` sets the clip name.
 
 ## What was kept or lost
 
@@ -30,9 +30,9 @@ Each row of `metadata.csv` gets one `status` in `feasibility_all_clips.csv`:
 
 Checking at 10 s covers all sizes: since the windows are nested, a 10 s window that fits and doesn't overlap means the 3 s and 5 s windows don't either. Overlaps were dropped to avoid shared audio between clips.
 
-## Kept clips by species
+## Kept clips by class
 
-| Species | Clips |
+| Class | Clips |
 | --- | ---: |
 | pacific_chorus_frog | 705 |
 | woodhouses_toad | 560 |

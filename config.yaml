@@ -5,7 +5,7 @@ models: [birdnet, birdnet3, perch, perch2, cnn14, resnet]
 
 # Target classes (folder names in data/clips/). Every other class in data/metadata.csv (frogs, cricket, coyote,
 # nutria, dog, branches) is used only as a negative, so detectors face realistic field sounds.
-species:
+classes:
   - device_static
   - generator
   - traffic
@@ -40,7 +40,7 @@ min_train_clips: 40             # a recording only goes to test if each class ke
 # Classes with fewer than test_size_per_class + min_train_clips clips are "low sample": about half of their
 # recordings go to test, the rest to training. They switch to the full design once metadata.csv has enough clips.
 low_sample_test_fraction: 0.5
-donor_test_fraction: 0.2        # share of negative-only classes (e.g. animals) held out for test negatives
+negative_test_fraction: 0.2     # share of negative-only classes (e.g. animals) held out for test negatives
 
 data_path: data/clips
 clips_csv: data/metadata.csv

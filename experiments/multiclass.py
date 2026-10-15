@@ -75,7 +75,7 @@ def run_model(model, classes, study, cfg, out):
     for seed, probs in zip(cfg.random_seeds, predict_heads(heads, X, test_rows)):
         m = evaluate(probs, y_test, len(classes))
         cms.append(m["cm"])
-        rows += [{"model": model, "seed": seed, "class_name": c, "class_idx": i,
+        rows += [{"model": model, "seed": seed, "class": c, "class_idx": i,
                   "test_n": int((y_test == i).sum()), "ovr_auc": m["auc"][i], "precision": m["precision"][i],
                   "recall": m["recall"][i], "f1": m["f1"][i], "macro_f1": m["macro_f1"]}
                  for i, c in enumerate(classes)]
@@ -86,7 +86,7 @@ def run_model(model, classes, study, cfg, out):
     np.savez(out / f"test_embeddings_{model}.npz", embeddings=table.emb[test_rows],
              labels=y_test, class_names=np.array(classes))
     print(f"  {model:8s} macro F1 {df.groupby('seed').macro_f1.first().mean():.3f} | "
-          f"OvR AUC " + ", ".join(f"{c} {df[df.class_name == c].ovr_auc.mean():.3f}" for c in classes))
+          f"OvR AUC " + ", ".join(f"{c} {df[df['class'] == c].ovr_auc.mean():.3f}" for c in classes))
 
 
 def run(cfg, models, out):
@@ -94,7 +94,7 @@ def run(cfg, models, out):
     waiting = {c: len(s.train_pos) for c, s in study.splits.items() if len(s.train_pos) < cfg.headline_n}
     if waiting:
         print(f"Waiting for more data (fewer than {cfg.headline_n} training clips): {waiting}")
-    classes = [c for c in cfg.species if c not in waiting]
+    classes = [c for c in cfg.classes if c not in waiting]
     test_n = [len(study.partition.test_clips[c]) for c in classes]
     out.mkdir(parents=True, exist_ok=True)
     (out / "classes.json").write_text(json.dumps({"classes": classes, "test_n": test_n}))
@@ -106,7 +106,7 @@ def run(cfg, models, out):
         run_model(model, classes, study, cfg, out)
 
     dfs = [pd.read_csv(out / f"{m}.csv") for m in MODEL_NAMES if (out / f"{m}.csv").exists()]
-    agg = pd.concat(dfs).groupby(["model", "class_name"])[["ovr_auc", "f1", "macro_f1"]].agg(["mean", "std"])
+    agg = pd.concat(dfs).groupby(["model", "class"])[["ovr_auc", "f1", "macro_f1"]].agg(["mean", "std"])
     agg.columns = ["_".join(c) for c in agg.columns]
     agg.reset_index().to_csv(out / "summary.csv", index=False)
     print(f"\nAggregated results -> {out / 'summary.csv'}")
@@ -118,10 +118,10 @@ def fig_binary_vs_multiclass(cfg, out, classes):
     """Figure 6: binary AUC at the headline N vs multiclass one-vs-rest AUC, same positive test clips."""
     n = cfg.headline_n
     binary = pd.read_csv(cfg.results_path / "saturation" / "auc_by_n.csv")
-    binary = binary[binary.species.isin(classes) & (binary.training_size == n)][["species", "model", "test_auc_mean"]]
-    binary = binary.rename(columns={"species": "class_name", "test_auc_mean": "binary_auc"})
-    multi = pd.read_csv(out / "summary.csv")[["model", "class_name", "ovr_auc_mean"]]
-    both = binary.merge(multi, on=["model", "class_name"])
+    binary = binary[binary["class"].isin(classes) & (binary.training_size == n)][["class", "model", "test_auc_mean"]]
+    binary = binary.rename(columns={"test_auc_mean": "binary_auc"})
+    multi = pd.read_csv(out / "summary.csv")[["model", "class", "ovr_auc_mean"]]
+    both = binary.merge(multi, on=["model", "class"])
     models = [m for m in MODELS if m in set(both.model)]
     lo = math.floor(min(both.binary_auc.min(), both.ovr_auc_mean.min()) * 20) / 20
 
@@ -131,7 +131,7 @@ def fig_binary_vs_multiclass(cfg, out, classes):
             d = both[both.model == model]
             ax.plot([lo, 1], [lo, 1], "--", color="#bbbbbb", lw=0.9, zorder=0)
             for i, c in enumerate(classes):
-                r = d[d.class_name == c]
+                r = d[d["class"] == c]
                 if len(r):
                     ax.scatter(r.binary_auc, r.ovr_auc_mean, color=CLASS_COLORS[i], s=40, zorder=3,
                                edgecolors="white", linewidths=0.5, label=class_name(c))

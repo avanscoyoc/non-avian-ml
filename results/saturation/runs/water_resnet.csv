@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 water,resnet,20,32,5,True,5,1,0.6
 water,resnet,20,32,5,True,5,2,0.52
 water,resnet,20,32,5,True,5,3,0.52

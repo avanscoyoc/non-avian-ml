@@ -73,7 +73,7 @@ def oof_threshold(X, rows, labels, groups, cfg, seed) -> float:
 def run(cfg, all_data: bool) -> pd.DataFrame:
     study = load_study(cfg)
     splits, partition = study.splits, study.partition
-    classes = [c for c in cfg.species if splits[c].test_pos]
+    classes = [c for c in cfg.classes if splits[c].test_pos]
     test_files = [f for c in classes for f in partition.test_clips[c]]
     test_cls = np.array([c for c in classes for _ in partition.test_clips[c]])
     if all_data:
@@ -107,7 +107,7 @@ def run(cfg, all_data: bool) -> pd.DataFrame:
 
 
 def plot(cfg, df: pd.DataFrame, all_data: bool):
-    classes = [c for c in cfg.species if c in set(df.detector) | set(df.test_class)]
+    classes = [c for c in cfg.classes if c in set(df.detector) | set(df.test_class)]
     models = [m for m in MODELS if m in set(df.model)]
     n = len(classes)
     n_cols = min(3, len(models))

@@ -21,7 +21,7 @@ def partition_table(study, cfg) -> str:
     types = {c: t for t, classes in cfg.class_types.items() for c in classes}
     lines = ["| Class | Type | Recordings / clips | Test recordings / clips | Training recordings / clips | Max N |",
              "|---|---|---|---|---|---|"]
-    for c in cfg.species:
+    for c in cfg.classes:
         d = manifest[manifest.cls == c]
         test_recs = {p.source[f] for f in p.test_clips[c]}
         train_recs = {p.source[f] for f in p.train_clips[c]}

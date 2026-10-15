@@ -13,15 +13,15 @@ from sklearn.metrics import roc_auc_score
 from core.heads import predict_heads, train_heads
 from core.zero_shot import match_labels, zero_shot_scores
 
-GROUP = ["model", "species", "training_size", "n_epochs", "batch_size", "test_size_per_class", "low_sample"]
+GROUP = ["model", "class", "training_size", "n_epochs", "batch_size", "test_size_per_class", "low_sample"]
 
 
-def run_class(species, model_name, X, table, split, sizes, cfg, zero_shot_labels=None, low_sample=False):
+def run_class(cls, model_name, X, table, split, sizes, cfg, zero_shot_labels=None, low_sample=False):
     """All training sizes x seeds (+ zero-shot, if given the model's labels for the class) -> (run rows, prediction rows)."""
     test_files = split.test_pos + split.test_neg
     test_labels = [1] * len(split.test_pos) + [0] * len(split.test_neg)
     test_rows = table.rows(test_files)
-    base = {"species": species, "model": model_name, "n_epochs": cfg.n_epochs, "batch_size": cfg.batch_size,
+    base = {"class": cls, "model": model_name, "n_epochs": cfg.n_epochs, "batch_size": cfg.batch_size,
             "test_size_per_class": len(split.test_pos), "low_sample": low_sample}
     rows, preds = [], []
 
@@ -31,7 +31,7 @@ def run_class(species, model_name, X, table, split, sizes, cfg, zero_shot_labels
 
     skipped = [n for n in sizes if n > split.max_n]
     if skipped:
-        print(f"  {species:20s} N={', '.join(map(str, skipped))}: skipped (training pool {split.max_n} clips per side)")
+        print(f"  {cls:20s} N={', '.join(map(str, skipped))}: skipped (training pool {split.max_n} clips per side)")
     for size in sizes:
         if size > split.max_n:
             continue
@@ -42,15 +42,15 @@ def run_class(species, model_name, X, table, split, sizes, cfg, zero_shot_labels
         aucs = [record(size, seed, p) for seed, p in zip(cfg.random_seeds, probs)]
         rows += [{**base, "training_size": size, "random_seed": seed, "test_auc": auc}
                  for seed, auc in zip(cfg.random_seeds, aucs)]
-        print(f"  {species:20s} N={size:<4d} test AUC {np.mean(aucs):.3f} ± {np.std(aucs):.3f}")
+        print(f"  {cls:20s} N={size:<4d} test AUC {np.mean(aucs):.3f} ± {np.std(aucs):.3f}")
 
     if zero_shot_labels and table.labels:
         scores = zero_shot_scores(np.asarray(table.scores)[test_rows], match_labels(table.labels, zero_shot_labels))
         auc = record(0, 0, scores)
         rows.append({**base, "training_size": 0, "n_epochs": 0, "random_seed": 0, "test_auc": auc})
-        print(f"  {species:20s} zero-shot ({', '.join(zero_shot_labels)}): test AUC {auc:.3f}")
+        print(f"  {cls:20s} zero-shot ({', '.join(zero_shot_labels)}): test AUC {auc:.3f}")
 
-    pred_rows = [{"species": species, "model": model_name, "training_size": p["training_size"],
+    pred_rows = [{"class": cls, "model": model_name, "training_size": p["training_size"],
                   "random_seed": p["random_seed"], "filename": f, "label": y, "score": float(s)}
                  for p in preds for f, y, s in zip(test_files, test_labels, p["scores"])]
     return rows, pred_rows
@@ -65,9 +65,9 @@ def save_csv(rows, path) -> Path:
     return path
 
 
-def load_runs(runs_dir, species) -> pd.DataFrame | None:
+def load_runs(runs_dir, cls) -> pd.DataFrame | None:
     """Every model's run rows for one class."""
-    files = sorted(Path(runs_dir).glob(f"{species}_*.csv"))
+    files = sorted(Path(runs_dir).glob(f"{cls}_*.csv"))
     return pd.concat([pd.read_csv(f) for f in files], ignore_index=True) if files else None
 
 

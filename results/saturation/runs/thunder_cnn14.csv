@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 thunder,cnn14,20,32,8,True,5,1,0.921875
 thunder,cnn14,20,32,8,True,5,2,0.96875
 thunder,cnn14,20,32,8,True,5,3,0.96875

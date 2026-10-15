@@ -90,7 +90,7 @@ def plot(cfg, out):
     fig, axes = plt.subplots(len(GROUPS), n_cols, figsize=(3.1 * n_cols, 3.4 * len(GROUPS)), sharey=True,
                              constrained_layout=True)
     for r, (group, classes) in enumerate(GROUPS.items()):
-        panels = [(class_name(c), df[df.species == c]) for c in classes]
+        panels = [(class_name(c), df[df["class"] == c]) for c in classes]
         mean = df[df.group == group].groupby(["window", "training_size"], as_index=False).test_auc_mean.mean()
         panels.append((f"{group.capitalize()} mean ({len(classes)} classes)", mean.assign(test_auc_ci_95=np.nan)))
         for k, ax in enumerate(axes[r]):

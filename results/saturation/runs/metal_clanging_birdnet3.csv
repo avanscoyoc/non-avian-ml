@@ -1,4 +1,4 @@
-species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+class,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
 metal_clanging,birdnet3,20,32,30,True,5,1,0.62
 metal_clanging,birdnet3,20,32,30,True,5,2,0.51
 metal_clanging,birdnet3,20,32,30,True,5,3,0.6955555555555556

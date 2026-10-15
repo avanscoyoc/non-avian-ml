@@ -37,11 +37,11 @@ class Study:
 
 def make_study(manifest: pd.DataFrame, classes: list[str], cfg, test_size: int, min_train: int, **paths) -> Study:
     partition = make_partition(manifest, classes, test_size, cfg.split_seed, cfg.max_test_recording_clips,
-                               min_train, cfg.donor_test_fraction, cfg.low_sample_test_fraction)
+                               min_train, cfg.negative_test_fraction, cfg.low_sample_test_fraction)
     return Study(manifest, partition, {c: binary_split(partition, c, cfg.split_seed) for c in classes}, **paths)
 
 
 def load_study(cfg) -> Study:
     """The main clip set (data/metadata.csv) and the shared split."""
-    return make_study(load_manifest(cfg.clips_csv), cfg.species, cfg, cfg.test_size_per_class, cfg.min_train_clips,
+    return make_study(load_manifest(cfg.clips_csv), cfg.classes, cfg, cfg.test_size_per_class, cfg.min_train_clips,
                       data_path=cfg.data_path, embeddings_path=cfg.embeddings_path)
