@@ -8,15 +8,11 @@ project:
       email: avanscoyoc@berkeley.edu
       affiliations:
         - UC Berkeley
-  exports:
-    - format: pdf
-      template: ./docs/lapreprint-custom
-      output: docs/manuscript.pdf
-      article: docs/myst.md
-    - format: docx    
-      template: ./docs/lapreprint-custom
-      output: docs/manuscript.docx
-      article: docs/myst.md
+  # docs/brief.md declares its own PDF export (pixi run brief). old/ holds the superseded manuscript.
+  exclude:
+    - old/**
+    - notes/**
+    - results/**
 
 site:
   title: Non-Avian Acoustic Classifier Development
