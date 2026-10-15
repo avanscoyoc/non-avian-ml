@@ -1,0 +1,12 @@
+species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+fireworks,perch2,20,32,6,True,5,1,1.0
+fireworks,perch2,20,32,6,True,5,2,1.0
+fireworks,perch2,20,32,6,True,5,3,1.0
+fireworks,perch2,20,32,6,True,5,4,1.0
+fireworks,perch2,20,32,6,True,5,5,1.0
+fireworks,perch2,20,32,6,True,5,6,1.0
+fireworks,perch2,20,32,6,True,5,7,1.0
+fireworks,perch2,20,32,6,True,5,8,1.0
+fireworks,perch2,20,32,6,True,5,9,1.0
+fireworks,perch2,20,32,6,True,5,10,1.0
+fireworks,perch2,0,32,6,True,0,0,1.0

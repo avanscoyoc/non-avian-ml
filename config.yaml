@@ -1,0 +1,49 @@
+# Settings shared by every experiment (docs/brief.md). Paths are relative to the repo root.
+# Settings used by only one experiment live at the top of that experiment's file.
+
+models: [birdnet, birdnet3, perch, perch2, cnn14, resnet]
+
+# Target classes (folder names in data/clips/). Every other class in data/metadata.csv (frogs, cricket, coyote,
+# nutria, dog, branches) is used only as a negative, so detectors face realistic field sounds.
+species:
+  - device_static
+  - generator
+  - traffic
+  - engine
+  - power_tools
+  - human_vocal
+  - metal_clanging
+  - airplane
+  - gun
+  - fireworks
+  - human_non_vocal
+  - wind
+  - thunder
+  - water
+class_types:                  # Table 1
+  artificial: [device_static, generator, traffic, engine, power_tools, human_vocal, metal_clanging,
+               airplane, gun, fireworks, human_non_vocal]
+  abiotic: [wind, thunder, water]
+
+# Heads and training draws
+training_sizes: [5, 10, 20, 40, 80, 160]   # N clips of the class + N negatives, as far as the class allows
+headline_n: 40                             # headline N; also the multiclass N (classes with fewer training clips wait for data)
+random_seeds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]   # 10 random training draws per N -> mean and 95% CI
+n_epochs: 20
+batch_size: 32
+
+# One train/test split by source recording, shared by every experiment
+split_seed: 1
+test_size_per_class: 50
+max_test_recording_clips: 25    # prefer small recordings for the test set
+min_train_clips: 40             # a recording only goes to test if each class keeps >= this many training clips
+# Classes with fewer than test_size_per_class + min_train_clips clips are "low sample": about half of their
+# recordings go to test, the rest to training. They switch to the full design once metadata.csv has enough clips.
+low_sample_test_fraction: 0.5
+donor_test_fraction: 0.2        # share of negative-only classes (e.g. animals) held out for test negatives
+
+data_path: data/clips
+clips_csv: data/metadata.csv
+embeddings_path: cache/embeddings
+results_path: results
+figs_path: figs

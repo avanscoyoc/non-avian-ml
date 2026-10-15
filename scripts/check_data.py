@@ -1,26 +1,23 @@
-"""
-check_data.py
-
-Verifies data/ against data/metadata.csv: every clip present at data/{common_name}/{filename}
-and no extra wav files; clips that are not exactly 3 s are listed. Prints per-class counts
-and the recording/clip breakdown of the shared test/train partition (as in the README).
-main.py runs the same check and stops if it fails.
+"""Verifies data/clips/ against data/metadata.csv: every clip present at data/clips/{common_name}/{filename} and
+no extra wav files; clips that are not exactly 3 s are listed. Prints per-class counts and Table 1 of
+docs/brief.md (recordings and clips per class in the shared test/train split). experiments.saturation runs the
+same check and stops if it fails.
 
 Usage:
-    pixi run python scripts/check_data.py
+    pixi run check-data
 """
+import argparse
 import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.paths import CLIPS_CSV, DATA, ROOT  # noqa: E402
-from src.config import build_partition, load_config  # noqa: E402
-from src.data_loader import check_data, load_manifest  # noqa: E402
+from core.config import load_config
+from core.data import check_data
+from core.paths import CONFIG
+from core.study import load_study
 
 
-def partition_table(manifest, cfg) -> str:
-    """Markdown table: recordings and clips per class in the shared test/train partition."""
-    p = build_partition(manifest, cfg)
+def partition_table(study, cfg) -> str:
+    """Markdown table: recordings and clips per class in the shared test/train split."""
+    manifest, p = study.manifest, study.partition
     types = {c: t for t, classes in cfg.class_types.items() for c in classes}
     lines = ["| Class | Type | Recordings / clips | Test recordings / clips | Training recordings / clips | Max N |",
              "|---|---|---|---|---|---|"]
@@ -40,20 +37,24 @@ def partition_table(manifest, cfg) -> str:
 
 
 def main():
-    manifest = load_manifest(CLIPS_CSV)
+    parser = argparse.ArgumentParser(description="Check data/clips/ against data/metadata.csv.")
+    parser.add_argument("--config", default=CONFIG)
+    cfg = load_config(parser.parse_args().config)
+    study = load_study(cfg)
+    manifest = study.manifest
     counts = manifest.groupby("cls").agg(clips=("filename", "size"), recordings=("source", "nunique"))
     print(counts.to_string())
     print(f"total: {len(manifest)} clips, {manifest.source.nunique()} source recordings\n")
-    problems, notes = check_data(manifest, DATA)
+    problems, notes = check_data(manifest, cfg.data_path)
     for n in notes:
         print(f"NOTE: {n}")
     for p in problems:
         print(f"PROBLEM: {p}")
     if problems:
         sys.exit(1)
-    print(f"OK: all {len(manifest)} clips present in {DATA}, no extra files.\n")
-    print("Shared test/train partition (src/config.yaml):\n")
-    print(partition_table(manifest, load_config(ROOT / "src" / "config.yaml")))
+    print(f"OK: all {len(manifest)} clips present in {cfg.data_path}, no extra files.\n")
+    print("Shared test/train split (config.yaml):\n")
+    print(partition_table(study, cfg))
 
 
 if __name__ == "__main__":

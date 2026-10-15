@@ -1,0 +1,12 @@
+species,model,n_epochs,batch_size,test_size_per_class,low_sample,training_size,random_seed,test_auc
+water,cnn14,20,32,5,True,5,1,0.6799999999999999
+water,cnn14,20,32,5,True,5,2,0.6799999999999999
+water,cnn14,20,32,5,True,5,3,0.8
+water,cnn14,20,32,5,True,5,4,0.6799999999999999
+water,cnn14,20,32,5,True,5,5,0.6799999999999999
+water,cnn14,20,32,5,True,5,6,0.6799999999999999
+water,cnn14,20,32,5,True,5,7,0.8
+water,cnn14,20,32,5,True,5,8,0.8
+water,cnn14,20,32,5,True,5,9,0.6799999999999999
+water,cnn14,20,32,5,True,5,10,0.8
+water,cnn14,0,32,5,True,0,0,0.76

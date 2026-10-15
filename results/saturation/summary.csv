@@ -1,0 +1,85 @@
+class,model,label_status,zero_shot_auc,auc_at_40,ci_40,best_auc,best_n,plateau_n,break_even_n,outcome,low_sample,train_recordings,train_clips
+device_static,birdnet,new,,0.8253,0.0395,0.906,160,160,,,False,159,1366
+device_static,birdnet3,new,,0.7679,0.0332,0.8618,160,160,,,False,159,1366
+device_static,perch,new,,0.8587,0.0324,0.8796,80,80,,,False,159,1366
+device_static,perch2,new,,0.8862,0.0293,0.9289,160,160,,,False,159,1366
+device_static,cnn14,known,0.7108,0.7261,0.0409,0.8857,160,160,80.0,adaptation beats label,False,159,1366
+device_static,resnet,new,,0.84,0.0468,0.9181,160,80,,,False,159,1366
+generator,birdnet,new,,0.7898,0.02,0.7911,160,20,,,False,22,384
+generator,birdnet3,new,,0.7394,0.0154,0.7849,160,80,,,False,22,384
+generator,perch,new,,0.7402,0.0123,0.7418,160,20,,,False,22,384
+generator,perch2,new,,0.7707,0.0284,0.7884,160,40,,,False,22,384
+generator,cnn14,new,,0.6448,0.0302,0.7343,160,80,,,False,22,384
+generator,resnet,new,,0.6885,0.0275,0.8131,160,160,,,False,22,384
+traffic,birdnet,new,,0.7876,0.0321,0.8963,160,160,,,False,40,242
+traffic,birdnet3,new,,0.7726,0.0161,0.8397,160,160,,,False,40,242
+traffic,perch,new,,0.7776,0.0212,0.8354,160,80,,,False,40,242
+traffic,perch2,known,0.4396,0.806,0.0242,0.8358,160,80,5.0,adaptation beats label,False,40,242
+traffic,cnn14,known,0.692,0.8097,0.02,0.8705,160,160,20.0,adaptation beats label,False,40,242
+traffic,resnet,new,,0.7703,0.0137,0.8482,160,160,,,False,40,242
+engine,birdnet,known,0.8876,0.9523,0.012,0.9523,40,20,20.0,adaptation beats label,False,76,117
+engine,birdnet3,new,,0.8472,0.0173,0.8472,40,40,,,False,76,117
+engine,perch,new,,0.8672,0.0198,0.8896,80,80,,,False,76,117
+engine,perch2,known,0.698,0.9033,0.0167,0.9102,80,20,5.0,adaptation beats label,False,76,117
+engine,cnn14,known,0.8516,0.9318,0.0072,0.9398,80,40,20.0,adaptation beats label,False,76,117
+engine,resnet,new,,0.88,0.0079,0.8998,80,40,,,False,76,117
+power_tools,birdnet,known,0.9287,0.8205,0.0088,0.839,80,40,,label better,False,2,133
+power_tools,birdnet3,new,,0.6543,0.0236,0.6906,80,80,,,False,2,133
+power_tools,perch,new,,0.6375,0.0277,0.6591,5,5,,,False,2,133
+power_tools,perch2,known,0.7146,0.7025,0.0174,0.7159,80,5,,adaptation >= label (CI overlaps),False,2,133
+power_tools,cnn14,known,0.698,0.6741,0.0168,0.6966,80,80,,label better,False,2,133
+power_tools,resnet,new,,0.6472,0.0155,0.6472,40,5,,,False,2,133
+human_vocal,birdnet,known,0.9204,0.932,0.0118,0.932,40,40,,adaptation >= label (CI overlaps),False,2,64
+human_vocal,birdnet3,known,0.548,0.7375,0.0148,0.7375,40,40,5.0,adaptation beats label,False,2,64
+human_vocal,perch,new,,0.932,0.0051,0.932,40,40,,,False,2,64
+human_vocal,perch2,known,0.8372,0.9296,0.0048,0.9296,40,40,10.0,adaptation beats label,False,2,64
+human_vocal,cnn14,known,0.9904,0.9091,0.0056,0.9091,40,20,,label better,False,2,64
+human_vocal,resnet,new,,0.7683,0.0143,0.7683,40,40,,,False,2,64
+metal_clanging,birdnet,new,,,,0.7119,20,20,,,True,15,30
+metal_clanging,birdnet3,new,,,,0.6242,20,20,,,True,15,30
+metal_clanging,perch,new,,,,0.724,20,20,,,True,15,30
+metal_clanging,perch2,new,,,,0.819,20,20,,,True,15,30
+metal_clanging,cnn14,known,0.5433,,,0.756,20,10,5.0,adaptation beats label,True,15,30
+metal_clanging,resnet,new,,,,0.7483,20,10,,,True,15,30
+airplane,birdnet,new,,,,0.7936,20,20,,,True,6,27
+airplane,birdnet3,new,,,,0.6235,20,10,,,True,6,27
+airplane,perch,new,,,,0.8126,20,20,,,True,6,27
+airplane,perch2,known,0.4896,,,0.7528,20,20,5.0,adaptation beats label,True,6,27
+airplane,cnn14,known,0.7968,,,0.9362,20,20,10.0,adaptation beats label,True,6,27
+airplane,resnet,new,,,,0.8922,20,20,,,True,6,27
+gun,birdnet,known,0.7037,,,1.0,10,5,5.0,adaptation beats label,True,2,10
+gun,birdnet3,new,,,,0.7407,10,5,,,True,2,10
+gun,perch,new,,,,0.9568,10,10,,,True,2,10
+gun,perch2,known,1.0,,,1.0,10,5,,tie at ceiling,True,2,10
+gun,cnn14,known,1.0,,,1.0,5,5,,tie at ceiling,True,2,10
+gun,resnet,new,,,,0.9037,10,5,,,True,2,10
+fireworks,birdnet,known,1.0,,,1.0,5,5,,tie at ceiling,True,2,7
+fireworks,birdnet3,new,,,,0.7417,5,5,,,True,2,7
+fireworks,perch,new,,,,0.9389,5,5,,,True,2,7
+fireworks,perch2,known,1.0,,,1.0,5,5,,tie at ceiling,True,2,7
+fireworks,cnn14,known,1.0,,,1.0,5,5,,tie at ceiling,True,2,7
+fireworks,resnet,new,,,,0.9917,5,5,,,True,2,7
+human_non_vocal,birdnet,known,0.8889,,,1.0,5,5,5.0,adaptation beats label,True,1,5
+human_non_vocal,birdnet3,new,,,,1.0,5,5,,,True,1,5
+human_non_vocal,perch,new,,,,0.9778,5,5,,,True,1,5
+human_non_vocal,perch2,new,,,,1.0,5,5,,,True,1,5
+human_non_vocal,cnn14,new,,,,1.0,5,5,,,True,1,5
+human_non_vocal,resnet,new,,,,1.0,5,5,,,True,1,5
+wind,birdnet,new,,0.9763,0.002,0.9806,160,10,,,False,94,453
+wind,birdnet3,new,,0.9557,0.0112,0.9557,40,20,,,False,94,453
+wind,perch,new,,0.9683,0.0073,0.9792,160,40,,,False,94,453
+wind,perch2,known,0.9772,0.9559,0.0147,0.9705,160,10,,tie at ceiling,False,94,453
+wind,cnn14,known,0.9828,0.9816,0.0015,0.9824,20,5,,tie at ceiling,False,94,453
+wind,resnet,new,,0.9738,0.002,0.9805,160,5,,,False,94,453
+thunder,birdnet,new,,,,0.9672,10,5,,,True,3,13
+thunder,birdnet3,new,,,,0.8078,5,5,,,True,3,13
+thunder,perch,new,,,,0.9688,10,10,,,True,3,13
+thunder,perch2,known,0.9531,,,0.9359,10,5,,label better,True,3,13
+thunder,cnn14,known,1.0,,,0.9547,10,5,,label better,True,3,13
+thunder,resnet,new,,,,0.9891,10,10,,,True,3,13
+water,birdnet,new,,,,0.796,5,5,,,True,1,6
+water,birdnet3,new,,,,0.916,5,5,,,True,1,6
+water,perch,new,,,,0.752,5,5,,,True,1,6
+water,perch2,known,0.76,,,0.784,5,5,,adaptation >= label (CI overlaps),True,1,6
+water,cnn14,known,0.76,,,0.728,5,5,,label better,True,1,6
+water,resnet,new,,,,0.564,5,5,,,True,1,6
