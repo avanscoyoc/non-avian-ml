@@ -7,7 +7,7 @@ __MACOSX
 _build
 test_audio
 tmp
-
+old/
 # Audio clips (Zenodo); the manifests next to them are tracked
 data/clips/
 data/windows/*/

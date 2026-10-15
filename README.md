@@ -19,7 +19,7 @@ cache/          model files and embeddings (not in git; rebuilt on demand, safe 
 results/        every number behind the brief
 figs/           every figure in the brief
 docs/           brief.md (+ PDF) and slides
-old/            superseded material (see old/README.md)
+old/            superseded material, kept locally (not in git)
 ```
 
 ## Experiments
