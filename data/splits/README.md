@@ -51,6 +51,38 @@ mc = e[e.experiment == "multiclass"]
 train, test = mc[(mc.set == "train") & (mc.seed == 1)], mc[mc.set == "test"]
 ```
 
+### Example: rebuilding cross-detection (Figure 3)
+
+Cross-detection asks what each class's detector responds to. It works differently from the other experiments:
+
+- **14 detectors, one per noise class (`target`), each trained 10 times (`seed` 1–10).** Each training set holds
+  N clips of the target (`label` 1) and N negatives (`label` 0), drawn equally from the other 22 classes, animal
+  sounds included. N is 40, or less for classes that don't have 40 training clips: metal clanging and airplane
+  20, gun and thunder 10, fireworks, human non-vocal and water 5. `cross_detection_all_data` (Figure S3) uses
+  each class's whole training pool instead.
+- **One test set for all detectors:** the test clips of the 14 noise classes (415 clips), with no animal clips.
+  Every detector scores every test clip, so use each clip's `class`, not `label`.
+- **The result is a 14 × 14 grid.** Cell (detector *d*, class *c*) is the share of class *c*'s test clips that
+  detector *d* flags (score ≥ 0.5), averaged over the 10 seeds. The diagonal is each detector's hit rate on its own
+  class (recall). Off-diagonal cells are false alarms. Rows needn't sum to 1, because one clip can set off several
+  detectors.
+
+```python
+cd = e[e.experiment == "cross_detection"]   # or "cross_detection_all_data"
+test = cd[cd.set == "test"]
+rates = []
+for (target, seed), train in cd[cd.set == "train"].groupby(["target", "seed"]):
+    detector = fit(train.filename, train.label)            # your model: 1 = target, 0 = anything else
+    flagged = score(detector, test.filename) >= 0.5
+    for cls, hit in test.assign(hit=flagged).groupby("class").hit:
+        rates.append({"detector": target, "test_class": cls, "seed": seed, "rate": hit.mean()})
+grid = pd.DataFrame(rates).groupby(["detector", "test_class"]).rate.mean().unstack()
+```
+
+`fit` and `score` stand for your own model. Compare `grid` with the `detection_rate` column of
+`results/cross_detection/headline.csv` (or `all_data.csv`), which comes from this repository's MLP heads. The
+low-sample classes have only 3–30 test clips, so their columns are noisy.
+
 ## partition.csv
 
 Every clip in both clip sets (`clip_set` = `main` or `windows`), with its `class` and `source` recording.
