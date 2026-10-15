@@ -28,6 +28,7 @@ class Config:
     embeddings_path: Path
     results_path: Path
     figs_path: Path
+    zero_shot_labels: dict[str, dict[str, list[str]]]  # {class: {model: [label, ...]}}
 
     def __post_init__(self):
         for name in ("data_path", "clips_csv", "embeddings_path", "results_path", "figs_path"):

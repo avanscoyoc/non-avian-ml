@@ -1,4 +1,4 @@
-"""Frozen pretrained encoders and their model files.
+"""Frozen pretrained encoders, their model files and audio loading.
 
 Every encoder maps 3-s clips to an L2-normalised embedding and, where the model has its own classifier, to raw
 label scores (used only for zero-shot). Device policy: PyTorch models use CUDA when available; TensorFlow/TFLite
@@ -19,6 +19,7 @@ import urllib.request
 import warnings
 from pathlib import Path
 
+import librosa
 import numpy as np
 import pandas as pd
 import torch
@@ -27,7 +28,7 @@ import torchaudio.transforms as T
 from torchvision import models
 from torchvision.models import ResNet18_Weights
 
-from core.data import centre_pad, load_clip
+from core.data import CLIP_SECONDS
 from core.paths import MODELS
 
 PERCH_V8_URL = ("https://www.kaggle.com/api/v1/models/google/bird-vocalization-classifier/"
@@ -83,6 +84,28 @@ def cnn14() -> tuple[Path, list[str]]:
     return weights, pd.read_csv(labels)["display_name"].tolist()
 
 
+# ── Audio ─────────────────────────────────────────────────────────────────────
+
+def load_clip(path, sr: int, seconds: float = CLIP_SECONDS) -> np.ndarray:
+    """Mono float32 at `sr`, centre-cropped or end-padded to exactly `seconds`."""
+    y, _ = librosa.load(str(path), sr=sr, mono=True)
+    n = int(round(sr * seconds))
+    if len(y) > n:
+        start = (len(y) - n) // 2
+        y = y[start:start + n]
+    elif len(y) < n:
+        y = np.pad(y, (0, n - len(y)))
+    return y.astype(np.float32)
+
+
+def centre_pad(y: np.ndarray, sr: int, seconds: float) -> np.ndarray:
+    """Pad with equal silence on both sides (a 3 s clip padded to 5 s gets 1 s on each side)."""
+    extra = int(round(sr * seconds)) - len(y)
+    if extra <= 0:
+        return y
+    return np.pad(y, (extra // 2, extra - extra // 2))
+
+
 # ── Encoders ──────────────────────────────────────────────────────────────────
 
 def torch_device() -> torch.device:
@@ -111,7 +134,7 @@ class Encoder:
     labels: list[str] | None = None  # model's own classes, if any (for zero-shot)
     device = "cpu"
 
-    clip_seconds = 3.0  # input window; clips are centre-cropped or zero-padded to this length
+    clip_seconds = CLIP_SECONDS  # input window; clips are centre-cropped or zero-padded to this length
 
     def _load(self, path) -> np.ndarray:
         return load_clip(path, self.sample_rate, self.clip_seconds)

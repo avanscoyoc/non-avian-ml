@@ -1,10 +1,10 @@
 """Binary cross-detection, Figures 3 and S3 and the supplementary note on cutoffs in docs/brief.md: how each
 class's binary detector responds to every class's test clips.
 
-Two versions (the held-out test recordings are never used for training or for choosing cutoffs):
-  default     N = headline_n (40) training clips per class, or the largest N a low-sample class reaches: the same
+Two versions, both run each time; neither uses the held-out test recordings for training or for choosing cutoffs:
+  headline    N = headline_n (40) training clips per class, or the largest N a low-sample class reaches: the same
               clips as the multiclass experiment, so binary false alarms and multiclass confusions are like-for-like.
-  --all-data  every training clip of the class (1:1 with negatives): the deployment view, the best detector this
+  all_data    every training clip of the class (1:1 with negatives): the deployment view, the best detector this
               data supports. Rows then differ in training data (device static 1,366 clips ... water 6).
 
 Detectors are trained as in the saturation experiment (MLP head, 10 random draws) and run on the test clips of all
@@ -23,8 +23,8 @@ low), so the figures use 0.5.
 Outputs: results/cross_detection/{headline,all_data}.csv. Figures: cross_detection, cross_detection_all_data.
 
 Usage:
-    pixi run cross-detection                                       # both versions (each skipped if its CSV exists)
-    pixi run python -m experiments.cross_detection [--all-data] --plot
+    pixi run cross-detection                                # both versions (each skipped if its CSV exists), then plot
+    pixi run python -m experiments.cross_detection --plot   # figures only
 """
 import argparse
 import sys
@@ -43,6 +43,7 @@ from core.study import load_study
 
 THRESHOLD = 0.5  # cutoff for the figures; also the tuned check's fallback
 MAX_FOLDS = 5
+VERSIONS = {"headline": False, "all_data": True}  # results/cross_detection/{name}.csv -> trained on all clips?
 
 
 def oof_threshold(X, rows, labels, groups, cfg, seed) -> float:
@@ -137,21 +138,21 @@ def plot(cfg, df: pd.DataFrame, all_data: bool):
 def main():
     parser = argparse.ArgumentParser(description="Binary cross-detection.")
     parser.add_argument("--config", default=CONFIG)
-    parser.add_argument("--all-data", action="store_true", help="Train on every training clip (deployment view).")
-    parser.add_argument("--plot", action="store_true", help="Only redraw the figure from saved results.")
+    parser.add_argument("--plot", action="store_true", help="Only redraw the figures from saved results.")
     args = parser.parse_args()
     sys.stdout.reconfigure(line_buffering=True)
     cfg = load_config(args.config)
-    out = cfg.results_path / "cross_detection" / f"{'all_data' if args.all_data else 'headline'}.csv"
-    if not args.plot:
-        if out.exists():
-            print(f"{out} exists (delete it to rerun)")
-        else:
-            df = run(cfg, args.all_data)
-            out.parent.mkdir(parents=True, exist_ok=True)
-            df.round(4).to_csv(out, index=False)
-            print(f"Results: {out}")
-    plot(cfg, pd.read_csv(out), args.all_data)
+    for name, all_data in VERSIONS.items():
+        out = cfg.results_path / "cross_detection" / f"{name}.csv"
+        if not args.plot:
+            if out.exists():
+                print(f"{out} exists (delete it to rerun)")
+            else:
+                df = run(cfg, all_data)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                df.round(4).to_csv(out, index=False)
+                print(f"Results: {out}")
+        plot(cfg, pd.read_csv(out), all_data)
 
 
 if __name__ == "__main__":

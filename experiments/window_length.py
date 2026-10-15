@@ -54,7 +54,7 @@ def run(cfg, out):
     # Only the clips that are used: each class's test set and every training draw.
     needed = set()
     for s in study.splits.values():
-        needed |= set(s.test_pos + s.test_neg)
+        needed |= set(s.test_files)
         for n in SIZES:
             if n <= s.max_n:
                 needed |= {f for files, _ in s.draws(n, cfg.random_seeds) for f in files}

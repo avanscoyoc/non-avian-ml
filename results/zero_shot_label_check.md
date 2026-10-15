@@ -1,6 +1,6 @@
 # Zero-shot label check (training-pool clips only)
 
-AUC = how well the label's score separates the class's training clips from the other classes' training clips. `mapping` labels are used for the N=0 point; `candidates` are shown for review only.
+AUC = how well the label's score separates the class's training clips from the other classes' training clips. Mapped labels give the N=0 point.
 
 ## birdnet (6522 labels)
 

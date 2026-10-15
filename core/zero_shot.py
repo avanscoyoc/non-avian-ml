@@ -1,20 +1,9 @@
 """True zero-shot: score test clips with the model's own label(s) for the class, no training.
 
-The class -> label mapping lives in core/zero_shot_labels.yaml and should be reviewed with
-scripts/zero_shot_label_check.py (training clips only) before the full run.
+The class -> label mapping is `zero_shot_labels` in config.yaml; review it on training clips only with
+scripts/zero_shot_label_check.py.
 """
 import numpy as np
-import yaml
-
-from core.paths import ROOT
-
-LABEL_MAP_PATH = ROOT / "core" / "zero_shot_labels.yaml"
-
-
-def load_label_map(path=LABEL_MAP_PATH, section="mapping") -> dict[str, dict[str, list[str]]]:
-    """{class: {model: [label, ...]}} from the YAML's `mapping` (used) or `candidates` (report only)."""
-    with open(path) as f:
-        return (yaml.safe_load(f) or {}).get(section) or {}
 
 
 def match_labels(model_labels: list[str], wanted: list[str]) -> list[int]:

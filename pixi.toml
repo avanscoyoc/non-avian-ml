@@ -31,16 +31,15 @@ zero-shot-labels = "python -m scripts.zero_shot_label_check"
 # Experiments (docs/brief.md). Each skips work whose results are already saved, then draws its figures.
 saturation = "python -m experiments.saturation"
 linear-probe = "python -m experiments.linear_probe"
-cross-detection = "python -m experiments.cross_detection && python -m experiments.cross_detection --all-data"
+cross-detection = "python -m experiments.cross_detection"
 multiclass = "python -m experiments.multiclass"
 window-length = "python -m experiments.window_length"
 experiments = """python -m experiments.saturation && python -m experiments.linear_probe \
-  && python -m experiments.cross_detection && python -m experiments.cross_detection --all-data \
-  && python -m experiments.multiclass && python -m experiments.window_length"""
+  && python -m experiments.cross_detection && python -m experiments.multiclass && python -m experiments.window_length"""
 # Redraw every figure in figs/ from the saved results
 figures = """python -m experiments.saturation --plot && python -m experiments.linear_probe --plot \
-  && python -m experiments.cross_detection --plot && python -m experiments.cross_detection --all-data --plot \
-  && python -m experiments.multiclass --plot && python -m experiments.window_length --plot"""
+  && python -m experiments.cross_detection --plot && python -m experiments.multiclass --plot \
+  && python -m experiments.window_length --plot"""
 # Documents
 myst-install = "npm install -g mystmd@1.9.1"
 brief = { cmd = "myst build docs/brief.md --pdf", depends-on = ["myst-install"] }

@@ -52,7 +52,7 @@ Shared design (`core/`):
 - **Heads** (`core/heads.py`). MLP Linear → 256 → 64 → 2, dropout 0.3, Adam, 20 epochs, batch 32. Each training
   size N is repeated with 10 random training draws; results are means with 95% CIs across draws.
 - **Zero-shot (N = 0)**: a model's own output label for the class, where it has one
-  (`core/zero_shot_labels.yaml`; review with `pixi run zero-shot-labels`, which uses training clips only).
+  (`zero_shot_labels` in `config.yaml`; review with `pixi run zero-shot-labels`, which uses training clips only).
 
 ## Classes
 

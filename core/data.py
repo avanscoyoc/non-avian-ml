@@ -1,12 +1,10 @@
-"""Clip manifest, data checks, audio loading and the one train/test split by source recording shared by every
-experiment: per-class binary splits and their seeded, balanced training draws."""
+"""Clip manifest, data checks and the one train/test split by source recording shared by every experiment:
+per-class binary splits and their seeded, balanced training draws."""
 import random
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-import librosa
-import numpy as np
 import pandas as pd
 import soundfile as sf
 
@@ -62,28 +60,6 @@ def check_data(manifest: pd.DataFrame, data_path) -> tuple[list[str], list[str]]
     if off_length:
         notes.append(f"{len(off_length)} clips not exactly {CLIP_SECONDS:.0f} s (padded/cropped to 3 s): {', '.join(off_length)}")
     return problems, notes
-
-
-# ── Audio ─────────────────────────────────────────────────────────────────────
-
-def load_clip(path, sr: int, seconds: float = CLIP_SECONDS) -> np.ndarray:
-    """Mono float32 at `sr`, centre-cropped or end-padded to exactly `seconds`."""
-    y, _ = librosa.load(str(path), sr=sr, mono=True)
-    n = int(round(sr * seconds))
-    if len(y) > n:
-        start = (len(y) - n) // 2
-        y = y[start:start + n]
-    elif len(y) < n:
-        y = np.pad(y, (0, n - len(y)))
-    return y.astype(np.float32)
-
-
-def centre_pad(y: np.ndarray, sr: int, seconds: float) -> np.ndarray:
-    """Pad with equal silence on both sides (3 s -> 5 s adds 1 s each side, as data_5s did)."""
-    extra = int(round(sr * seconds)) - len(y)
-    if extra <= 0:
-        return y
-    return np.pad(y, (extra // 2, extra - extra // 2))
 
 
 # ── One shared train/test partition by source recording ───────────────────────
@@ -188,6 +164,19 @@ class Split:
     @property
     def max_n(self) -> int:
         return min(len(self.train_pos), len(self.train_neg))
+
+    @property
+    def test_files(self) -> list[str]:
+        return self.test_pos + self.test_neg
+
+    @property
+    def test_labels(self) -> list[int]:
+        return [1] * len(self.test_pos) + [0] * len(self.test_neg)
+
+    @property
+    def files(self) -> list[str]:
+        """Every clip the task uses: both training pools and the test set."""
+        return self.train_pos + self.train_neg + self.test_files
 
     def draw(self, n: int, seed: int) -> tuple[list[str], list[int]]:
         """Balanced training draw: n clips of the class and n negatives from the training pools, shuffled."""

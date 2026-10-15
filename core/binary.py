@@ -18,8 +18,7 @@ GROUP = ["model", "class", "training_size", "n_epochs", "batch_size", "test_size
 
 def run_class(cls, model_name, X, table, split, sizes, cfg, zero_shot_labels=None, low_sample=False):
     """All training sizes x seeds (+ zero-shot, if given the model's labels for the class) -> (run rows, prediction rows)."""
-    test_files = split.test_pos + split.test_neg
-    test_labels = [1] * len(split.test_pos) + [0] * len(split.test_neg)
+    test_files, test_labels = split.test_files, split.test_labels
     test_rows = table.rows(test_files)
     base = {"class": cls, "model": model_name, "n_epochs": cfg.n_epochs, "batch_size": cfg.batch_size,
             "test_size_per_class": len(split.test_pos), "low_sample": low_sample}

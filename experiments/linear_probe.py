@@ -39,19 +39,18 @@ def linear_probe_auc(E, train_rows, train_labels, test_rows, test_labels) -> flo
 def run(cfg) -> pd.DataFrame:
     study = load_study(cfg)
     auc = pd.read_csv(cfg.results_path / "saturation" / "auc_by_n.csv")
-    files = [f for s in study.splits.values() for f in s.train_pos + s.train_neg + s.test_pos + s.test_neg]
+    files = [f for s in study.splits.values() for f in s.files]
     rows = []
     for model in cfg.models:
         table, _ = study.embed(model, files)
         E = np.ascontiguousarray(table.emb)
         for c, s in study.splits.items():
             mlp = auc[(auc["class"] == c) & (auc.model == model)].set_index("training_size")
-            test_rows = table.rows(s.test_pos + s.test_neg)
-            test_labels = [1] * len(s.test_pos) + [0] * len(s.test_neg)
+            test_rows = table.rows(s.test_files)
             for n in cfg.training_sizes:
                 if n > s.max_n:
                     continue
-                aucs = [linear_probe_auc(E, table.rows(f), l, test_rows, test_labels)
+                aucs = [linear_probe_auc(E, table.rows(f), l, test_rows, s.test_labels)
                         for f, l in s.draws(n, cfg.random_seeds)]
                 rows.append({"class": c, "model": model, "training_size": n,
                              "low_sample": c in study.partition.low_sample,

@@ -1,4 +1,4 @@
-"""Repo-relative paths, so the code runs from any clone (devcontainer, cirrus, laptop)."""
+"""Repo-relative paths, so the code runs from any clone (devcontainer, laptop, GPU server)."""
 import os
 from pathlib import Path
 

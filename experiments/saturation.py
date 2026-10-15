@@ -3,7 +3,7 @@
 For each target class and model, binary MLP heads are trained on frozen embeddings with N clips of the class and
 N negatives (N = 5 ... 160 as far as the class's training pool allows, 10 random draws each) and scored on the
 class's fixed test clips. N = 0 is zero-shot: the model's own label for the class, where it has one
-(core/zero_shot_labels.yaml). Classes with such a label are "known" to the model, the rest are "new".
+(`zero_shot_labels` in config.yaml). Classes with such a label are "known" to the model, the rest are "new".
 
 Outputs in results/saturation/:
   runs/{class}_{model}.csv             test AUC of every draw (written last: marks the class x model as done)
@@ -16,7 +16,7 @@ Figures: saturation_main and saturation_low_sample (curves), saturation_summary 
 Usage:
     pixi run saturation                                 # train what's missing, summarise, plot
     pixi run python -m experiments.saturation --plot    # figures only
-    # cirrus: TensorFlow models (CPU) and PyTorch models (GPU) as two parallel jobs
+    # On a GPU server: TensorFlow models (CPU) and PyTorch models (GPU) as two parallel jobs
     pixi run -e gpu python -m experiments.saturation --models birdnet perch perch2
     pixi run -e gpu python -m experiments.saturation --models birdnet3 cnn14 resnet
 """
@@ -40,7 +40,6 @@ from core.encoders import MODEL_NAMES
 from core.paths import CONFIG
 from core.plotting import AXIS, GRID, INK, INK_MUTED, INK_SECONDARY, MODELS, class_name, model_name, save
 from core.study import load_study
-from core.zero_shot import load_label_map
 
 PLATEAU_TOL = 0.02  # plateau N: smallest N whose mean AUC is within this of the best
 CEILING = 0.97      # zero-shot and best AUC both at least this: a tie at the ceiling
@@ -66,7 +65,6 @@ def train(cfg, study, models: list[str], classes: list[str]):
         splits[c] = study.splits[c]
     print_split_audit(study.partition, splits, cfg.training_sizes)
 
-    label_map = load_label_map()
     out = cfg.results_path / "saturation"
     for model in models:
         todo = [c for c in splits if not (out / "runs" / f"{c}_{model}.csv").exists()]
@@ -75,12 +73,11 @@ def train(cfg, study, models: list[str], classes: list[str]):
             continue
         print(f"\n{'=' * 80}\n[{model}] {len(todo)} classes\n{'=' * 80}")
         start = time.time()
-        table, X = study.embed(model, [f for c in todo for s in [splits[c]]
-                                       for f in s.train_pos + s.train_neg + s.test_pos + s.test_neg])
+        table, X = study.embed(model, [f for c in todo for f in splits[c].files])
         print(f"[{model}] training heads on {X.device}")
         for c in todo:
             rows, preds = run_class(c, model, X, table, splits[c], cfg.training_sizes, cfg,
-                                    label_map.get(c, {}).get(model), low_sample=c in study.partition.low_sample)
+                                    cfg.zero_shot_labels.get(c, {}).get(model), low_sample=c in study.partition.low_sample)
             save_csv(preds, out / "predictions" / f"{c}_{model}.csv.gz")
             save_csv(rows, out / "runs" / f"{c}_{model}.csv")  # written last: marks the class x model as done
         del X
@@ -91,7 +88,6 @@ def train(cfg, study, models: list[str], classes: list[str]):
 
 def summarise(cfg, study, auc: pd.DataFrame) -> pd.DataFrame:
     """Per class x model: what the curve reaches, where it levels off, and how it compares with a built-in label."""
-    labels = load_label_map()
     partition = study.partition
     rows = []
     for c in cfg.classes:
@@ -101,7 +97,7 @@ def summarise(cfg, study, auc: pd.DataFrame) -> pd.DataFrame:
             if d.empty:
                 continue
             trained = d[d.training_size > 0]
-            known = bool(labels.get(c, {}).get(m))
+            known = bool(cfg.zero_shot_labels.get(c, {}).get(m))
             zs = d[d.training_size == 0].test_auc_mean
             zs = float(zs.iloc[0]) if known and len(zs) else np.nan
             best = trained.loc[trained.test_auc_mean.idxmax()]
@@ -298,13 +294,12 @@ def plot_heatmap(cfg, auc: pd.DataFrame, summary: pd.DataFrame):
 def plot(cfg):
     out = cfg.results_path / "saturation"
     auc = pd.read_csv(out / "auc_by_n.csv")
-    label_map = load_label_map()
     present = [c for c in cfg.classes if c in set(auc["class"])]
     low = set(auc.loc[auc.low_sample.astype(bool), "class"])
     groups = {"main": [c for c in present if c not in low], "low_sample": [c for c in present if c in low]}
     for group, classes in groups.items():
         if classes:
-            plot_curves(auc, classes, cfg.figs_path / f"saturation_{group}", label_map,
+            plot_curves(auc, classes, cfg.figs_path / f"saturation_{group}", cfg.zero_shot_labels,
                         LOW_SAMPLE_TITLE if group == "low_sample" else None)
     plot_heatmap(cfg, auc, pd.read_csv(out / "summary.csv"))
 

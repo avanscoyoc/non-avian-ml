@@ -55,13 +55,9 @@ def _save_cache(cache_dir: Path, table: EmbeddingTable) -> None:
 
 
 def _check_source(cache_dir: Path, source: str) -> bool:
-    """True if the cache was built with the current model file (an unstamped cache is stamped as current)."""
+    """True if the cache was built with the current model file (or there is no cache yet)."""
     info_file = cache_dir / "info.json"
-    if not info_file.exists():
-        if (cache_dir / "emb.npy").exists():
-            info_file.write_text(json.dumps({"source": source}))
-        return True
-    return json.loads(info_file.read_text()).get("source") == source
+    return not info_file.exists() or json.loads(info_file.read_text()).get("source") == source
 
 
 def get_embeddings(model_name: str, clips: list[tuple[str, str]], data_path, embeddings_path,
