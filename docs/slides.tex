@@ -1,7 +1,5 @@
 % slides.tex: slide deck for the experiment brief (docs/brief.md), with its figures and tables in the same order.
-% Build from the repo root:
-%   latexmk -cd -lualatex -interaction=nonstopmode -outdir=../_build/slides docs/slides.tex
-%   cp _build/slides/slides.pdf docs/slides.pdf
+% Build from the repo root: pixi run slides (latexmk with LuaLaTeX, then copies the PDF to docs/slides.pdf)
 \documentclass[aspectratio=169,11pt]{beamer}
 \usepackage{fontspec}
 \setsansfont{OpenSans}[Extension=.ttf, UprightFont=*-Regular, BoldFont=*-Bold, ItalicFont=*-Italic,

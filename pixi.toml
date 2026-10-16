@@ -1,7 +1,7 @@
 [workspace]
 authors = ["Amy Van Scoyoc <avanscoyoc@berkeley.edu>"]
 channels = ["conda-forge"]
-description = "A comparison of machine learning model performance on non-avian audio"
+description = "Transferring pretrained audio models to artificial noise and abiotic sound"
 name = "non-avian-ml"
 platforms = ["linux-64", "linux-aarch64", "osx-arm64"]
 version = "0.1.0"
@@ -21,7 +21,7 @@ pyyaml = "*"
 tqdm = "*"
 pip = "*"
 setuptools = "<81"  # tensorflow_hub still imports pkg_resources
-nodejs = ">=20"
+mystmd = "1.9.1.*"  # builds docs/brief.pdf
 
 [tasks]
 # Setup and data
@@ -45,10 +45,11 @@ experiments = { cmd = """python -m experiments.saturation && python -m experimen
 figures = """python -m experiments.saturation --plot && python -m experiments.linear_probe --plot \
   && python -m experiments.cross_detection --plot && python -m experiments.multiclass --plot \
   && python -m experiments.window_length --plot"""
-# Documents
-myst-install = "npm install -g mystmd@1.9.1"
-brief = { cmd = "myst build docs/brief.md --pdf", depends-on = ["myst-install"] }
-myst-start = { cmd = "myst start", depends-on = ["myst-install"] }
+# Documents (LaTeX: the devcontainer has it)
+brief = "myst build docs/brief.md --pdf"
+slides = """latexmk -cd -lualatex -interaction=nonstopmode -outdir=../_build/slides docs/slides.tex \
+  && cp _build/slides/slides.pdf docs/slides.pdf"""
+myst-start = "myst start"
 
 [pypi-dependencies]
 tensorflow = ">=2.15.0"
@@ -57,7 +58,7 @@ ai-edge-litert = "*"
 soundfile = "*"
 birdnet = { version = "==1.1.1", extras = ["pt"] }
 
-# GPU environment for the cirrus server (x86_64 + NVIDIA). PyTorch models and all
+# GPU environment for a Linux x86_64 server with an NVIDIA GPU (CUDA 12). PyTorch models and all
 # classifier heads run on CUDA; TensorFlow/TFLite models stay on the CPU.
 #   pixi install -e gpu
 #   pixi run -e gpu experiments

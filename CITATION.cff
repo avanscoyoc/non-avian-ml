@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this code, the data splits or the results, please cite them as below."
+type: software
+title: "Transferring pretrained audio models to artificial noise and abiotic sound"
+authors:
+  - family-names: Van Scoyoc
+    given-names: Amy
+    orcid: "https://orcid.org/0000-0001-8638-935X"
+    affiliation: "UC Berkeley"
+repository-code: "https://github.com/avanscoyoc/non-avian-ml"
+license: BSD-3-Clause
+keywords:
+  - passive acoustic monitoring
+  - bioacoustics
+  - transfer learning
+  - anthropogenic noise
+  - BirdNET
+  - Perch
+references:
+  - type: data
+    # TODO before release: use the Zenodo record's exact title
+    title: "Labelled audio clips used in 'Transferring pretrained audio models to artificial noise and abiotic sound'"
+    authors:
+      - family-names: Van Scoyoc
+        given-names: Amy
+    identifiers:
+      - type: doi
+        value: "10.5281/zenodo.20534256"

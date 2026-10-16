@@ -1,10 +1,41 @@
-# Artificial and Abiotic Noise Classification with Frozen Audio Embeddings
+# Transferring pretrained audio models to artificial noise and abiotic sound
 
 How well do frozen pretrained audio models transfer to artificial noise (engines, traffic, generators, power tools,
 device static, …) and abiotic sound (wind, thunder, water) in passive acoustic recordings? For 14 noise classes and
 6 pretrained models, a small classifier head is trained on each model's embeddings. The findings, figures and
-methods are in [docs/brief.md](docs/brief.md) ([PDF](docs/brief.pdf)). This README covers the code and how to
-reproduce the figures.
+methods are in [docs/brief.md](docs/brief.md) ([PDF](docs/brief.pdf), [slides](docs/slides.pdf)). This README
+covers the code and how to reproduce the figures.
+
+## Key findings
+
+1. **About 40 labelled clips per class is enough for most classes.** A small head on frozen embeddings reaches a
+   mean test AUC of 0.69–0.97 across the well-sampled classes at N = 40, and most curves are close to their best
+   by then.
+2. **The sound class matters more than the model.** Wind and engine are easy for every model, and generator and
+   power tools are hard for every model. BirdNET 2.4 is best on average, and an ImageNet image model does about as
+   well as the general-audio model CNN14.
+3. **A trained head usually matches or beats a model's built-in label.** Where a model already has a label for
+   the class, the head clearly beats it in 13 of 29 cases, typically by N = 5, and ties near the ceiling in 7.
+4. **Errors fall between acoustically similar sounds:** vehicle noise, impulsive sounds, wind and thunder, and
+   device static and wind. The same confusions appear in binary detectors, in a multiclass head and in the
+   embeddings themselves.
+5. **Longer input windows help only generator.** With BirdNET 3.0, 5–10 s windows instead of 3 s improve
+   generator and leave the other classes unchanged.
+
+![Test AUC at N = 40 clips per class for every class and model](figs/saturation_summary.png)
+
+*Test AUC at N = 40 clips per class (Figure 2 of the brief). Outlined cells: the model has a built-in label for
+the class, and "zs" is that label's zero-shot AUC. Classes marked \* have few clips (provisional).*
+
+## Quick start
+
+```bash
+pixi install          # https://pixi.sh
+pixi run figures      # redraw every figure in figs/ from the saved results: no audio or models needed
+```
+
+Rerunning the experiments themselves also needs the audio clips and the pretrained models: see
+[Installation](#installation) and [Data](#data).
 
 ## Repository layout
 
@@ -37,9 +68,10 @@ e.g. `pixi run python -m experiments.multiclass --plot`. The linear probe and mu
 against the saturation results, so run saturation first.
 
 ```bash
-pixi run experiments    # all five, in order
+pixi run experiments    # all five, in order (checks data/splits/ first)
 pixi run figures        # redraw every figure from results/
 pixi run brief          # build docs/brief.pdf
+pixi run slides         # build docs/slides.pdf
 ```
 
 Shared design (`core/`):
@@ -96,6 +128,7 @@ Raw clips: Zenodo, DOI [10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.
 data/
 ├── metadata.csv                      # one row per clip: common_name, source_audio_path, start/end times, filename
 ├── clips/{class}/*.wav               # 3 s clips, filename as in metadata.csv
+├── splits/                           # exact train/test clips of every experiment, see data/splits/README.md
 └── windows/                          # window-length experiment, see data/windows/README.md
     ├── manifest.csv                  # kept clips: window bounds and source recording
     ├── feasibility_all_clips.csv     # every metadata.csv row and whether it could be cut at 10 s
@@ -123,25 +156,10 @@ pixi run check-data
   larger N) with no code changes.
 - About 20% of the negative-only classes' clips are held out as test negatives.
 
-| Class | Type | Recordings / clips | Test recordings / clips | Training recordings / clips | Max N |
-|---|---|---|---|---|---|
-| Device static | artificial | 168 / 1416 | 9 / 50 | 159 / 1366 | 160 |
-| Generator | artificial | 32 / 437 | 10 / 50 | 22 / 384 | 160 |
-| Traffic | artificial | 53 / 297 | 13 / 50 | 40 / 242 | 160 |
-| Engine | artificial | 115 / 170 | 38 / 50 | 76 / 117 | 80 |
-| Power tools | artificial | 11 / 162 | 9 / 29 | 2 / 133 | 80 |
-| Human vocal | artificial | 16 / 117 | 14 / 50 | 2 / 64 | 40 |
-| Metal clanging * | artificial | 28 / 60 | 13 / 30 | 15 / 30 | 20 |
-| Airplane * | artificial | 12 / 52 | 6 / 25 | 6 / 27 | 20 |
-| Gun * | artificial | 7 / 19 | 5 / 9 | 2 / 10 | 10 |
-| Fireworks * | artificial | 4 / 13 | 2 / 6 | 2 / 7 | 5 |
-| Human non vocal * | artificial | 2 / 8 | 1 / 3 | 1 / 5 | 5 |
-| Wind | abiotic | 106 / 508 | 11 / 50 | 94 / 453 | 160 |
-| Thunder * | abiotic | 5 / 21 | 2 / 8 | 3 / 13 | 10 |
-| Water * | abiotic | 3 / 11 | 2 / 5 | 1 / 6 | 5 |
-
-\* low sample. 163 of 788 recordings are test; the other 625 are training (all classes, including negative-only
-ones). Some classes have few training recordings (power tools: 2, human vocal: 2), so their training clips are
+Of the 788 recordings, 163 are test and 625 are training (all classes, including negative-only ones). The
+recordings and clips per class are in Table 1 of the brief, and `pixi run check-data` prints the same table from
+`data/metadata.csv`. [`data/splits/partition.csv`](data/splits/README.md) lists every clip with its recording and
+split. Some classes have few training recordings (power tools: 2, human vocal: 2), so their training clips are
 less independent than the clip counts suggest.
 
 ## Running on a GPU server
@@ -155,6 +173,7 @@ pixi run -e gpu python -c "import torch; print(torch.cuda.is_available())"   # T
 pixi run -e gpu download-models
 # copy the audio to the server (data/clips/, data/windows/{3s,5s,10s}/), e.g. zip on the laptop, then unzip
 pixi run -e gpu check-data
+pixi run -e gpu check-splits               # the direct python runs below skip this check
 # TensorFlow models use the CPU and PyTorch models the GPU, so run the saturation experiment as two parallel jobs
 nohup pixi run -e gpu python -m experiments.saturation --models birdnet perch perch2 > run_cpu.log 2>&1 &
 nohup pixi run -e gpu python -m experiments.saturation --models birdnet3 cnn14 resnet > run_gpu.log 2>&1 &
@@ -168,11 +187,27 @@ job. `--classes` runs a subset of classes on the same split.
 
 ## Citation
 
+Please cite the code, splits and results with [`CITATION.cff`](CITATION.cff) (GitHub's "Cite this repository"),
+and the audio clips with their Zenodo DOI, [10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256).
+
 ```bibtex
-@software{non_avian_ml_2025,
-  title = {Non-Avian ML Audio Classification Framework},
+@software{vanscoyoc_noise_transfer_2026,
+  title  = {Transferring pretrained audio models to artificial noise and abiotic sound},
   author = {Van Scoyoc, Amy},
-  year = {2025},
-  url = {https://github.com/avanscoyoc/non-avian-ml}
+  year   = {2026},
+  url    = {https://github.com/avanscoyoc/non-avian-ml}
 }
 ```
+
+## License
+
+The code is BSD 3-Clause licensed ([LICENSE.md](LICENSE.md)). `core/cnn14.py` adapts the PANNs CNN14
+architecture (MIT license), and `docs/lapreprint-custom/` is based on the LaPreprint template (MIT). The audio clips
+are covered by the terms of their Zenodo record. The pretrained models are downloaded from their original sources
+and are covered by their own licenses.
+
+## Acknowledgements
+
+Developed at the Eric and Wendy Schmidt Center for Data Science and the Environment at UC Berkeley.
+Audio recordings were gathered by Amy Van Scoyoc and the California Department of Fish and Wildlife. 
+Thanks to the many students and colleagues who reviewed and verified audio for this project.

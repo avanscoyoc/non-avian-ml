@@ -1,18 +1,17 @@
 version: 1
 
 project:
-  title: Non-Avian Acoustic Classifier Development
+  title: Transferring pretrained audio models to artificial noise and abiotic sound
   date: 2026-06-03
   authors:
     - name: Amy Van Scoyoc
       email: avanscoyoc@berkeley.edu
       affiliations:
         - UC Berkeley
-  # docs/brief.md declares its own PDF export (pixi run brief). old/ holds the superseded manuscript.
+  # docs/brief.md declares its own PDF export (pixi run brief)
   exclude:
     - old/**
-    - notes/**
     - results/**
 
 site:
-  title: Non-Avian Acoustic Classifier Development
+  title: Transferring pretrained audio models to artificial noise and abiotic sound

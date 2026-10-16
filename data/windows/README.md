@@ -1,6 +1,6 @@
 # data/windows
 
-Clips for testing BirdNET+ V3.0 at 3 s, 5 s and 10 s window sizes (`experiments/window_length.py`), cut with ffmpeg from the source recordings at their native sample rate by `scripts/make_window_clips.py`. The source recordings (`audio/`) are not in the repository.
+Clips for testing BirdNET 3.0 at 3 s, 5 s and 10 s window sizes (`experiments/window_length.py`), cut with ffmpeg from the source recordings at their native sample rate by `scripts/make_window_clips.py`. The source recordings (`audio/`) are not in the repository.
 
 ## Files
 

@@ -4,11 +4,10 @@ FROM ubuntu:22.04
 # Prevent interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies including Python and LaTeX
+# System dependencies: audio I/O, ffmpeg (scripts/make_window_clips.py) and LaTeX (pixi run brief / slides).
+# Python and everything else come from pixi.
 RUN apt-get update && apt-get install -y \
     curl \
-    python3.10 \
-    python3-pip \
     libsndfile1 \
     ffmpeg \
     git \
@@ -24,9 +23,6 @@ RUN apt-get update && apt-get install -y \
     latexmk \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
-
-# Create symlinks for python
-RUN ln -sf /usr/bin/python3.10 /usr/bin/python
 
 # Install pixi
 RUN curl -fsSL https://pixi.sh/install.sh | bash
