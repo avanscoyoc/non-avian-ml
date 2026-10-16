@@ -3,8 +3,8 @@
 How well do frozen pretrained audio models transfer to artificial noise (engines, traffic, generators, power tools,
 device static, …) and abiotic sound (wind, thunder, water) in passive acoustic recordings? For 14 noise classes and
 6 pretrained models, a small classifier head is trained on each model's embeddings. The findings, figures and
-methods are in [docs/brief.md](docs/brief.md) ([PDF](docs/brief.pdf)); this README covers the code and how to
-reproduce them.
+methods are in [docs/brief.md](docs/brief.md) ([PDF](docs/brief.pdf)). This README covers the code and how to
+reproduce the figures.
 
 ## Repository layout
 
@@ -16,10 +16,9 @@ experiments/    one module per experiment in the brief; each saves results/<name
 scripts/        data and setup utilities
 data/           metadata.csv, window manifests and splits/ (tracked); audio clips from Zenodo (not in git)
 cache/          model files and embeddings (not in git; rebuilt on demand, safe to delete)
-results/        every number behind the brief
-figs/           every figure in the brief
+results/        results numbers, used in the brief
+figs/           figures calculated from results, used in the brief
 docs/           brief.md (+ PDF) and slides
-old/            superseded material, kept locally (not in git)
 ```
 
 ## Experiments
@@ -91,8 +90,7 @@ pixi run download-models    # optional: all six models -> cache/models/ (~1.5 GB
 
 ## Data
 
-Raw clips: Zenodo, DOI [10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256) (the deposit should be
-updated to the layout below).
+Raw clips: Zenodo, DOI [10.5281/zenodo.20534256](https://doi.org/10.5281/zenodo.20534256)
 
 ```
 data/
@@ -146,7 +144,7 @@ pixi run check-data
 ones). Some classes have few training recordings (power tools: 2, human vocal: 2), so their training clips are
 less independent than the clip counts suggest.
 
-## Running on the cirrus GPU server
+## Running on a GPU server
 
 ```bash
 nvidia-smi && uname -m                     # GPU visible, x86_64
@@ -165,8 +163,8 @@ pixi run -e gpu experiments                # the rest (completed saturation runs
 ```
 
 Whichever saturation job finishes last writes the complete `results/saturation/auc_by_n.csv`. Completed
-class × model runs are skipped on restart, and cached embeddings are reused. On a CPU-only machine run a single
-job: parallel jobs there just compete for the same cores. `--classes` runs a subset of classes on the same split.
+class × model runs are skipped on restart, and cached embeddings are reused. On a CPU-only machine, run a single
+job. `--classes` runs a subset of classes on the same split.
 
 ## Citation
 
