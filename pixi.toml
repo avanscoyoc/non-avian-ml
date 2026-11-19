@@ -70,5 +70,28 @@ system-requirements = { cuda = "12" }
 pytorch-gpu = "*"
 cuda-version = "12.*"
 
+# Annotation environment for notebooks/noise_annotation.ipynb: JupyterLab and jupyter-bioacoustic (from PyPI),
+# without the ML stack.
+#   pixi run -e annotate jupyter
+[feature.annotate.dependencies]
+python = "3.12.*"
+jupyterlab = ">=4.4,<5"
+ipykernel = "*"
+ffmpeg = "*"  # fast partial reads of long recordings in jupyter-bioacoustic
+pandas = "*"
+plotly = ">=7.1.0,<8"
+anywidget = ">=0.11.0,<0.12"
+python-dotenv = "*"
+requests = "*"
+boto3 = "*"  # from conda, so its botocore agrees with conda's python-dateutil (the annotator reads audio from S3)
+
+[feature.annotate.pypi-dependencies]
+jupyter-bioacoustic = ">=0.10.0"
+
+[feature.annotate.tasks]
+# --allow-root: the dev container runs as root; iopub_data_rate_limit: the annotator sends audio as notebook output
+jupyter = "jupyter lab --ip=0.0.0.0 --no-browser --allow-root --ZMQChannelsWebsocketConnection.iopub_data_rate_limit=1e10"
+
 [environments]
 gpu = ["gpu"]
+annotate = { features = ["annotate"], no-default-feature = true }

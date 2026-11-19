@@ -1,0 +1,14 @@
+# Labeling noise-model clips: the clip list made in step 3 of notebooks/noise_annotation.ipynb.
+# Answers save to the output file as you go.
+project_name: Noise model clips
+config: annotator_config/config/noise.yaml
+data:
+  source_type: path
+  value: data/annotation/noise_clips.csv
+  index_column: id
+audio:
+  source_type: column
+  value: path
+output:
+  path: data/annotation/noise_labels.csv
+  index_column: id

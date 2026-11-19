@@ -1,0 +1,40 @@
+# Quick multi-label form: each class button writes its own column (1 pressed, 0 not pressed), then Submit.
+# Layout from the "Quick label" workflow in jupyter_bioacoustic's demo/review-workflows.ipynb. The hot keys work
+# while the button grid is focused.
+side_form: true
+side_form_split: 0.62
+title:
+  value: 'detected: [[detected_label]]'
+  progress_tracker: true
+form:
+- text: Press every class you hear in the clip
+- grid:
+    columns: 2
+    gap: 6
+    unique: false   # any number of classes per clip
+    items:
+    - button: {column: engine,          value: 1, initial_value: 0, icon: engine,          width: 150, height: 28, hot_key: '1', show_hot_key: true}
+    - button: {column: fireworks,       value: 1, initial_value: 0, icon: fireworks,       width: 150, height: 28, hot_key: '2', show_hot_key: true}
+    - button: {column: gun,             value: 1, initial_value: 0, icon: gun,             width: 150, height: 28, hot_key: '3', show_hot_key: true}
+    - button: {column: power_tools,     value: 1, initial_value: 0, icon: power tools,     width: 150, height: 28, hot_key: '4', show_hot_key: true}
+    - button: {column: siren,           value: 1, initial_value: 0, icon: siren,           width: 150, height: 28, hot_key: '5', show_hot_key: true}
+    - button: {column: human_vocal,     value: 1, initial_value: 0, icon: human vocal,     width: 150, height: 28, hot_key: '6', show_hot_key: true}
+    - button: {column: human_non_vocal, value: 1, initial_value: 0, icon: human non-vocal, width: 150, height: 28, hot_key: '7', show_hot_key: true}
+    - button: {column: generator,       value: 1, initial_value: 0, icon: generator,       width: 150, height: 28, hot_key: '8', show_hot_key: true}
+    - button: {column: traffic,         value: 1, initial_value: 0, icon: traffic,         width: 150, height: 28, hot_key: '9', show_hot_key: true}
+    - button: {column: airplane,        value: 1, initial_value: 0, icon: airplane,        width: 150, height: 28, hot_key: '0', show_hot_key: true}
+    - button: {column: device_static,   value: 1, initial_value: 0, icon: device static,   width: 150, height: 28, hot_key: q, show_hot_key: true}
+    - button: {column: wind,            value: 1, initial_value: 0, icon: wind,            width: 150, height: 28, hot_key: w, show_hot_key: true}
+    - button: {column: water,           value: 1, initial_value: 0, icon: water,           width: 150, height: 28, hot_key: e, show_hot_key: true}
+    # In the same grid, so their keys work without moving focus. Flagged clips don't count toward the targets.
+    - button: {column: unsure,          value: 1, initial_value: 0, icon: unsure,          width: 150, height: 28, hot_key: u, show_hot_key: true}
+    - button: {column: unusable,        value: 1, initial_value: 0, icon: unusable,        width: 150, height: 28, hot_key: x, show_hot_key: true}
+    - button: {submit: true, icon: save, label: 'save (same as Submit)', width: 306, height: 28, hot_key: s, show_hot_key: true,
+               background: '#2e7d32', color: '#ffffff'}
+- textbox: {label: notes, column: notes}
+submission_buttons:
+  previous: true
+  next:
+    label: Skip     # moves on without saving: the clip doesn't count
+  submit:
+    label: Submit   # saves, even with nothing pressed (a negative for all 13 classes)

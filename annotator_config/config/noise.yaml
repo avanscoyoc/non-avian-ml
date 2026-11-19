@@ -1,0 +1,25 @@
+description:
+  title: Instructions
+  text: "Listen to the 3-second clip and look at the spectrogram.\n\n- Press **every** class you hear in the\
+    \ clip, not only the detected one. Pressed classes are saved as 1, the rest as 0. Press again to unpress.\n\
+    - **Submit** saves the clip and moves on. With nothing pressed, it saves a negative for all 13 classes.\n\
+    - **Skip** moves on without saving: the clip doesn't count.\n- **unsure** or **unusable** (distorted,\
+    \ dead mic) flags the clip; flagged clips don't count.\n\nKeys (click any button once, or Tab to the grid; focus stays there from clip to clip): 1-9, 0,\
+    \ q, w, e press the classes; u / x flag; s saves (same as Submit); k skips; j goes back.\n"
+  open: false
+display_columns:
+- site
+- recording_name
+- detected_label
+- confidence
+info_card_title: '[[site]]'
+info_card_text: '[[recording_name]]'
+default_buffer: 3   # seconds of context shown before and after each 3 s clip
+visualizations:
+- plain
+- mel
+- log_frequency
+- bandpass
+- waveform
+duplicate_entries: false
+form_config: annotator_config/forms/noise.yaml

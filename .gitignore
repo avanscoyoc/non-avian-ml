@@ -4,6 +4,7 @@ __pycache__
 __MACOSX
 .pixi
 .devcontainer/.env
+.env
 _build
 test_audio
 tmp
@@ -11,6 +12,6 @@ old/
 # Audio clips (Zenodo); the manifests next to them are tracked
 data/clips/
 data/windows/*/
-
+data
 # Model files and embeddings: rebuilt on demand, safe to delete
 cache/
